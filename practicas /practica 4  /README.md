@@ -44,7 +44,9 @@ Fotos del funcionamiento del ejericicio 2:
 Para la tercera parte de esta práctica, se utilizó la KL25Z para crear un sistema más completo que integra teclado matricial, display LCD, temporizador e interrupciones, en donde el usuario ingresa un tiempo en segundos y el sistema realiza un conteo hasta alcanzar ese valor. El funcionamiento de este código incluye la lectura de datos desde el keypad, la configuración del TPM0 para generar intervalos de 1 segundo y una interrupción en PTA1 que permite pausar el conteo mostrando “PAUSED” en el LCD, el cual puede reanudarse al presionar “*”; al finalizar el tiempo, se muestra “Tiempo cumplido!” y el LED parpadea antes de indicar el fin del programa.
 
 ## Diagrama de flujo
-
+<div align="center">
+<img width="450" height="982" alt="image" src="https://github.com/user-attachments/assets/64946402-8e39-4539-9bd3-0e940712614a" />
+</div>
 
 ## Funcionamiento
 Fotos del funcionamiento del ejericicio 3:
