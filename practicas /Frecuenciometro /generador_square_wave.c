@@ -18,11 +18,6 @@ int main(void) {
 
 	TPM0_set_square_wave(0.02); //50Hz
 	while (1){
-        int i;
-        for (i = 0; i < 100; i++) {
-            PTD->PTOR = 0x02; //toggle LED
-            delayMs(20);
-        }
 	} //generamos la señal
 
 }
