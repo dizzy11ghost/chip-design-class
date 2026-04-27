@@ -3,6 +3,7 @@
 # Mini Reto 6 - Frecuenciometro
 
 ## Descripción de la práctica
+El objetivo de esta práctica es diseñar y construir un frecuencímetro utilizando los timers de un microcontrolador. Este dispositivo será capaz de medir la frecuencia de una señal de entrada con precisión (+-1%) y mostrar el resultado en una pantalla LCD.
 
 ## Diagrama de flujo
 
