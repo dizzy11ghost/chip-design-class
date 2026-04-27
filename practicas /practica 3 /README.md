@@ -34,6 +34,7 @@ Para la segunda parte de esta práctica, se utilizó la KL25Z para crear un temp
 <div align="center">
  ![image alt](https://github.com/dizzy11ghost/chip-design-class/blob/c0d13dbb8a883cc8afb80daa7e748c306f42ef60/Imagenes/Practica_3_part_2.drawio.png)
 </div>
+
 ## Esquemático 
 <div align="center">
  <img width="793" height="459" alt="image" src="https://github.com/user-attachments/assets/5e968134-2508-4e08-b830-7136769e0d88" />
