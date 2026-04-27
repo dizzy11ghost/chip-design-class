@@ -32,7 +32,7 @@ int main(void) {
     SIM->SCGC5    |= 0x1000;
     PORTD->PCR[1]  = 0x100;
     PTD->PDDR     |= 0x02;
-    PTD->PSOR      = 0x02;   // FIX 3: LED apagado al inicio (activo-bajo)
+    PTD->PSOR      = 0x02;
 
     LCD_init();
     keypad_init();
@@ -46,10 +46,7 @@ int main(void) {
     LCD_command(0x80);
     LCD_string("Tiempo (s):");
 
-    // FIX 2: leer_segundos() solo una vez, FUERA del while
     uint8_t segundos = leer_segundos();
-
-    if (segundos == 0) segundos = 1; // seguridad
 
     TPM0_set_period_seconds(1);
 
@@ -71,12 +68,10 @@ int main(void) {
     char buf[4];
 
     while (1) {
-        // FIX 2: NO llamar leer_segundos() aquí adentro
         if (TPM0->SC & 0x80) {        // TOF set?
             TPM0->SC |= 0x80;         // clear TOF (escribir 1 al bit)
             cuenta++;
 
-            // FIX 1: posicionar cursor en línea 2 antes de escribir
             LCD_command(0xC0);
             buf[0] = '0' + (cuenta / 10);
             buf[1] = '0' + (cuenta % 10);
@@ -94,7 +89,6 @@ int main(void) {
                 LCD_command(0x80);
                 LCD_string("Tiempo cumplido!");
 
-                // FIX 3: parpadeo LED activo-bajo correcto
                 int i;
                 for (i = 0; i < 10; i++) {
                     PTD->PTOR = 0x02;   // toggle
@@ -150,8 +144,6 @@ uint8_t leer_segundos(void) {
     }
     return valor;
 }
-
-// --- Resto de funciones sin cambios ---
 
 void LCD_init(void) {
     SIM->SCGC5 |= 0x1000;
@@ -257,3 +249,4 @@ char keypad_getkey(void) {
     if (col == 0x70) return row*4 + 4;
     return 0;
 }
+
