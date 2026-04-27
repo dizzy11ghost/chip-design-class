@@ -31,9 +31,7 @@ A continuación, se adjuntan fotografías del sistema funcionando:
 Para la segunda parte de esta práctica, se utilizó la KL25Z para crear un temporizador ascendente con apoyo de un display LCD y el teclado matricial, en donde primero se captura la cantidad de segundos que desea ingresar el usuario y después el sistema comienza a contar de forma automática hasta llegar al límite establecido. El funcionamiento de este código incluye una función para configurar el TPM0 con un periodo de 1 segundo, otra para leer los segundos tecleados y mostrarlos en el LCD, y al finalizar el conteo se despliega el mensaje de “Tiempo cumplido!”, haciendo parpadear el LED de la tarjeta antes de dejar el programa detenido.
 
 ## Diagrama de flujo
-<div align="center">
- <![image alt](https://github.com/dizzy11ghost/chip-design-class/blob/6d474e0402c7de0e89dfa08dfeaf42397c829793/Imagenes/flujo_1.png)>
-</div>
+![image alt](https://github.com/dizzy11ghost/chip-design-class/blob/6d474e0402c7de0e89dfa08dfeaf42397c829793/Imagenes/flujo_1.png)
 
 ## Funcionamiento 
 
