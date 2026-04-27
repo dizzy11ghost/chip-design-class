@@ -20,6 +20,7 @@ El funcionamiento de esto inclye una función capaz de recuperar los datos de ge
 </div>
 
 ## Funcionamiento
+Gracias a una integración de la parte de hardware y software, se pudo comprobar que el sistema funciona de manera efectiva, dejando escoger al usuario entre LEDs y cumpliendo de manera adecuada con las interrupciones
 Fotografías del sistema funcionando: 
 <div align="center">
  <img width=30% height=30% alt="image" src="https://github.com/user-attachments/assets/c1130f10-3dbb-4579-9a9b-44737ae8a0fd" />
