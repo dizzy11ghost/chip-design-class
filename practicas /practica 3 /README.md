@@ -20,8 +20,8 @@ El funcionamiento de esto inclye una función capaz de recuperar los datos de ge
 </div>
 
 ## Funcionamiento
-Gracias a una integración de la parte de hardware y software, se pudo comprobar que el sistema funciona de manera efectiva, dejando escoger al usuario entre LEDs y cumpliendo de manera adecuada con las interrupciones
-Fotografías del sistema funcionando: 
+Gracias a una integración de la parte de hardware y software, se pudo comprobar que el sistema funciona de manera efectiva, dejando escoger al usuario entre LEDs y cumpliendo de manera adecuada con las interrupciones. 
+A continuación, se adjuntan fotografías del sistema funcionando: 
 <div align="center">
  <img width=30% height=30% alt="image" src="https://github.com/user-attachments/assets/c1130f10-3dbb-4579-9a9b-44737ae8a0fd" />
  <img width=30% height=30% alt="image" src="https://github.com/user-attachments/assets/43976d99-d44d-4eac-8814-652332004056" />
@@ -35,4 +35,7 @@ Para la segunda parte de esta práctica, se utilizó la KL25Z para crear un temp
 ## Diagrama de flujo
 
 ## Funcionamiento 
-[![Ver video](https://img.youtube.com/vi/RXWTv0RfCsw/0.jpg)](https://youtube.com/shorts/RXWTv0RfCsw)
+<div align="center">
+ [![Ver video](https://img.youtube.com/vi/RXWTv0RfCsw/0.jpg)](https://youtube.com/shorts/RXWTv0RfCsw)
+</div>
+
