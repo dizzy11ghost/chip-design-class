@@ -14,8 +14,8 @@ Para la primera parte de esta práctica, se utilizó la KL25Z para crear un sist
 ## Funcionamiento
 Fotos del funcionamiento del ejericicio 1:
 <div align="center">
-<img width=50% height=50% alt="image" src="https://github.com/user-attachments/assets/e71dddd3-d113-4fc6-8a93-74c8eda53e5c" />
-<img width=50% height=50% alt="image" src="https://github.com/user-attachments/assets/f45fdd4c-445c-4679-8364-55a513462b80" />
+<img width=30% height=30% alt="image" src="https://github.com/user-attachments/assets/e71dddd3-d113-4fc6-8a93-74c8eda53e5c" />
+<img width=30% height=30% alt="image" src="https://github.com/user-attachments/assets/f45fdd4c-445c-4679-8364-55a513462b80" />
 </div>
 # Parte 2
 ## Descripción del proyecto
