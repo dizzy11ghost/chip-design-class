@@ -22,9 +22,20 @@ Para la segunda parte de esta práctica, se utilizó la KL25Z para crear un sist
 
 ## Diagrama de flujo
 
+## Esquematico
+<img width="524" height="407" alt="practica4_pt2_esquematico" src="https://github.com/user-attachments/assets/d693dbda-9129-4e32-bfce-6e3e417d381a" />
+
 
 ## Funcionamiento
-Fotos del funcionamiento del ejericicio 2
+Fotos del funcionamiento del ejericicio 2:
+<div align="center">
+ <img width="1600" height="900" alt="Practica4_img1" src="https://github.com/user-attachments/assets/97dae52c-1c11-489e-91b2-1b1c07ebca32" 
+  />
+ <img width="1600" height="900" alt="Practica4_img2" src="https://github.com/user-attachments/assets/2bb63685-a385-4205-ba86-3f1230e48dfd" 
+  />
+ <img width="1600" height="900" alt="Practica4_img3" src="https://github.com/user-attachments/assets/7c8cd3dc-83c9-45d3-9a93-c433860c594f" 
+  />
+</div>
 
 # Parte 3
 ## Descripción del proyecto
