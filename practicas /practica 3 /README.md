@@ -35,7 +35,7 @@ Para la segunda parte de esta práctica, se utilizó la KL25Z para crear un temp
 ## Diagrama de flujo
 
 ## Funcionamiento 
-<div align="center">
+
  [![Ver video](https://img.youtube.com/vi/RXWTv0RfCsw/0.jpg)](https://youtube.com/shorts/RXWTv0RfCsw)
-</div>
+
 
