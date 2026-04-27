@@ -11,6 +11,9 @@ El objetivo de esta práctica es diseñar y construir un frecuencímetro utiliza
 </div>
 
 ## Esquemático del circuito utilizado 
+<div align="center">
+  <img width="1102" height="630" alt="image" src="https://github.com/user-attachments/assets/25b69bf8-922d-4113-b55c-bce3a1cd4ec7" />
+</div>
 
 ## Funcionamiento
 - Probar el frecuencímetro con señales de frecuencia conocida (por ejemplo, generadas por un generador de señales):
