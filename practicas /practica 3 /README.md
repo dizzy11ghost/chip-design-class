@@ -14,6 +14,11 @@ El funcionamiento de esto inclye una función capaz de recuperar los datos de ge
  <img width=50% height="996" alt="image" src="https://github.com/user-attachments/assets/f2f5bf94-672c-4b92-8abd-e2ce2e940e93" />
 </div>
 
+## Esquemático del circuito utilizado 
+<div align="center">
+ <img width="524" height="407" alt="image" src="https://github.com/user-attachments/assets/4c8084cf-5f77-46f4-9c64-c9f24b9d2b0b" />
+</div>
+
 ## Funcionamiento
 Fotografías del sistema funcionando: 
 <div align="center">
