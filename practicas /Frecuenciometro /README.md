@@ -20,5 +20,3 @@ El objetivo de esta práctica es diseñar y construir un frecuencímetro utiliza
 
 - Comparar los resultados obtenidos con la frecuencia real para validar la precisión del dispositivo:
 
-- Ajustar cualquier desajuste en la configuración del timer o en el código para mejorar la exactitud de las mediciones:
-
