@@ -12,10 +12,11 @@ Para la primera parte de esta práctica, se utilizó la KL25Z para crear un sist
 
 
 ## Funcionamiento
-Fotos del funcionamiento del ejericicio 1 
-<img width="1200" height="1600" alt="image" src="https://github.com/user-attachments/assets/e71dddd3-d113-4fc6-8a93-74c8eda53e5c" />
-<img width="1200" height="1600" alt="image" src="https://github.com/user-attachments/assets/f45fdd4c-445c-4679-8364-55a513462b80" />
- 
+Fotos del funcionamiento del ejericicio 1:
+<div align="center">
+<img width=50% height=50% alt="image" src="https://github.com/user-attachments/assets/e71dddd3-d113-4fc6-8a93-74c8eda53e5c" />
+<img width=50% height=50% alt="image" src="https://github.com/user-attachments/assets/f45fdd4c-445c-4679-8364-55a513462b80" />
+</div>
 # Parte 2
 ## Descripción del proyecto
 Para la segunda parte de esta práctica, se utilizó la KL25Z para crear un sistema con múltiples interrupciones desde un mismo puerto junto con un display LCD, en donde se detectan dos botones diferentes (PTA1 y PTA13) y se muestra en pantalla cuál fue presionado. El funcionamiento de este código incluye la inicialización del LCD en modo de 4 bits, el uso de interrupciones para identificar cada botón y desplegar mensajes como “Boton PTA1” o “Boton PTA13”, mientras que el LED rojo continúa parpadeando en el ciclo principal hasta que ocurre alguna interrupción.
