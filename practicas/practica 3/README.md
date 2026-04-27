@@ -1,1 +1,0 @@
-![Diagrama de flujo](path/to/flowchart.png)
