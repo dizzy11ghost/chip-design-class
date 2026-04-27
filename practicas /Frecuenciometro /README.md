@@ -6,6 +6,9 @@
 El objetivo de esta práctica es diseñar y construir un frecuencímetro utilizando los timers de un microcontrolador. Este dispositivo será capaz de medir la frecuencia de una señal de entrada con precisión (+-1%) y mostrar el resultado en una pantalla LCD.
 
 ## Diagrama de flujo
+<div align="center">
+  <img width="318" height="928" alt="image" src="https://github.com/user-attachments/assets/69a03aae-797b-4ed4-96b1-7b67067f74d3" />
+</div>
 
 ## Esquemático del circuito utilizado 
 
