@@ -72,14 +72,13 @@ int main(void) {
 void init_TPM0(void){
 	SIM->SCGC6  |= 0x01000000;   // clock a TPM0
 	SIM->SOPT2  |= 0x03000000;   // fuente MCGIRCLK
-	MCG->C2 |= 0x01;
-	MCG->C1 |= 0x02;          // habilitar MCGIRCLK
-	SIM->SCGC5 |= 0x0800       // clock Port B
-	PORTC->PCR[1] = 0x400;       // MUX = ALT4 (TPM0_CH0)
+	MCG->C1     |= 0x02;          // habilitar MCGIRCLK
+	SIM->SCGC5  |= 0x0400;        // clock Port B
+	PORTB->PCR[0] = 0x400;        // MUX = ALT4 (TPM0_CH0)
 	TPM0->SC  = 0;                 // detener
 	TPM0->MOD = 0xFFFF;            // contador máximo
 	TPM0->CNT = 0;
-	TPM0->CONTROLS[0].CnSC = 0x14;
+	TPM0->CONTROLS[0].CnSC = 0x04;
 	TPM0->SC = 0x02;               // prescaler /4
 	TPM0->SC |= 0x08;              /* enable timer free-running mode*/
 }
