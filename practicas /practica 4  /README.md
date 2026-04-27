@@ -46,6 +46,12 @@ Para la tercera parte de esta práctica, se utilizó la KL25Z para crear un sist
 <img width="450" height="982" alt="image" src="https://github.com/user-attachments/assets/64946402-8e39-4539-9bd3-0e940712614a" />
 </div>
 
+## Esquemático del circuito utilizado 
+Para esta configuración, se utilizó un teclado matricial y un módulo de display LCD conectados a la tarjeta KL25z, como se muestra en el esquemático. Adicionalmente, se utilizó un botón conectado al puerto PTA1 de la tarjeta y a common ground. 
+<div align="center">
+ <img width="793" height="459" alt="image" src="https://github.com/user-attachments/assets/5e968134-2508-4e08-b830-7136769e0d88" />
+</div>
+
 ## Funcionamiento
 A continuación se adjunta una demsotración del funcionamiento de la práctica:
 
