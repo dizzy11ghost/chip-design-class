@@ -47,5 +47,6 @@ Para la tercera parte de esta práctica, se utilizó la KL25Z para crear un sist
 
 
 ## Funcionamiento
-Fotos del funcionamiento del ejericicio 3
+Fotos del funcionamiento del ejericicio 3:
+
 [![Ver video](https://img.youtube.com/vi/AvPZikpiZnM/0.jpg)](https://youtube.com/shorts/AvPZikpiZnM)
