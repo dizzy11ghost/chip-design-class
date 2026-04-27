@@ -7,7 +7,7 @@
 Para la primera parte de esta práctica, se utilizó la KL25Z para crear un sistema basado en interrupciones con un botón y dos LEDs, en donde el LED rojo se mantiene parpadeando de forma continua hasta que el usuario presiona un botón. El funcionamiento de este código incluye la configuración del temporizador TPM0 para generar retardos, así como una interrupción en el pin PTA1 que, al activarse, apaga el LED rojo y enciende el LED verde durante un segundo antes de volver a apagarlo, demostrando el uso de interrupciones externas junto con control de LEDs.
 
 ## Diagrama de flujo
-
+<img width="1550" height="3083" alt="Blank diagram (1)" src="https://github.com/user-attachments/assets/9a0008cc-0948-4b48-8c1f-dbfd507830d3" />
 
 ## Funcionamiento
 Fotos del funcionamiento del ejericicio 1:
@@ -25,7 +25,6 @@ Para la segunda parte de esta práctica, se utilizó la KL25Z para crear un sist
 
 ## Esquemático
 <img width="524" height="407" alt="practica4_pt2_esquematico" src="https://github.com/user-attachments/assets/d693dbda-9129-4e32-bfce-6e3e417d381a" />
-
 
 ## Funcionamiento
 Fotos del funcionamiento del ejericicio 2:
