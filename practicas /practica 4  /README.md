@@ -21,6 +21,7 @@ Fotos del funcionamiento del ejericicio 1:
 Para la segunda parte de esta práctica, se utilizó la KL25Z para crear un sistema con múltiples interrupciones desde un mismo puerto junto con un display LCD, en donde se detectan dos botones diferentes (PTA1 y PTA13) y se muestra en pantalla cuál fue presionado. El funcionamiento de este código incluye la inicialización del LCD en modo de 4 bits, el uso de interrupciones para identificar cada botón y desplegar mensajes como “Boton PTA1” o “Boton PTA13”, mientras que el LED rojo continúa parpadeando en el ciclo principal hasta que ocurre alguna interrupción.
 
 ## Diagrama de flujo
+![image alt](https://github.com/dizzy11ghost/chip-design-class/blob/eef29e5ffff2ee7a65fd27476b2aba68313072b6/Imagenes/Practica_4_part_2.drawio.png)
 
 ## Esquemático
 <img width="524" height="407" alt="practica4_pt2_esquematico" src="https://github.com/user-attachments/assets/d693dbda-9129-4e32-bfce-6e3e417d381a" />
