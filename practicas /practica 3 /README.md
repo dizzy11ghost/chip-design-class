@@ -1,6 +1,4 @@
-#### Miguel Alonso De La Rosa Zamora A01646106
-#### Gregorio Alejandro Orozco Torres A01641967
-#### A01639462 Sophia Leñero Gómez
+#### Miguel Alonso De La Rosa Zamora A01646106 - Gregorio Alejandro Orozco Torres A01641967 - Sophia Leñero Gómez A01639462
 
 # Práctica 3 - LCD-Keyboard-Timers
 
