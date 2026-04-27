@@ -1,6 +1,4 @@
-#### Miguel Alonso De La Rosa Zamora A01646106
-#### Gregorio Alejandro Orozco Torres A01641967
-#### A01639462 Sophia Leñero Gómez
+#### Miguel Alonso De La Rosa Zamora A01646106 - Gregorio Alejandro Orozco Torres A01641967 - Sophia Leñero Gómez A01639462
 
 # Práctica 4 - LCD-Keyboard-Timers-Interrupts.docx
 
@@ -24,7 +22,7 @@ Para la segunda parte de esta práctica, se utilizó la KL25Z para crear un sist
 
 ## Diagrama de flujo
 
-## Esquematico
+## Esquemático
 <img width="524" height="407" alt="practica4_pt2_esquematico" src="https://github.com/user-attachments/assets/d693dbda-9129-4e32-bfce-6e3e417d381a" />
 
 
@@ -41,7 +39,7 @@ Fotos del funcionamiento del ejericicio 2:
 
 # Parte 3
 ## Descripción del proyecto
-Para la tercera parte de esta práctica, se utilizó la KL25Z para crear un sistema más completo que integra teclado matricial, display LCD, temporizador e interrupciones, en donde el usuario ingresa un tiempo en segundos y el sistema realiza un conteo hasta alcanzar ese valor. El funcionamiento de este código incluye la lectura de datos desde el keypad, la configuración del TPM0 para generar intervalos de 1 segundo y una interrupción en PTA1 que permite pausar el conteo mostrando “PAUSED” en el LCD, el cual puede reanudarse al presionar “*”; al finalizar el tiempo, se muestra “Tiempo cumplido!” y el LED parpadea antes de indicar el fin del programa.
+Para la tercera parte de esta práctica, se utilizó la KL25Z para crear un sistema más completo que integra teclado matricial, display LCD, temporizador e interrupciones, en donde el usuario ingresa un tiempo en segundos y el sistema realiza un conteo hasta alcanzar ese valor. El funcionamiento de este código incluye la lectura de datos desde el keypad, la configuración del TPM0 para generar intervalos de 1 segundo y una interrupción en un botón conectado a PTA1 que permite pausar el conteo mostrando “PAUSED” en el LCD, el cual puede reanudarse al presionar “*”; al finalizar el tiempo, se muestra “Tiempo cumplido!” y el LED parpadea antes de indicar el fin del programa.
 
 ## Diagrama de flujo
 <div align="center">
@@ -49,6 +47,6 @@ Para la tercera parte de esta práctica, se utilizó la KL25Z para crear un sist
 </div>
 
 ## Funcionamiento
-Fotos del funcionamiento del ejericicio 3:
+A continuación se adjunta una demsotración del funcionamiento de la práctica:
 
 [![Ver video](https://img.youtube.com/vi/AvPZikpiZnM/0.jpg)](https://youtube.com/shorts/AvPZikpiZnM)
