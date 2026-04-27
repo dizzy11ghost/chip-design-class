@@ -10,8 +10,21 @@ void     delayMs(int n);
 void     delayUs(int n);
 
 int main(void) {
-	TPM0_set_square_wave(1); //1 segundo
-	while (1){} //generamos la señal
+    // LED rojo (PTD1) para parpadeo al final
+    SIM->SCGC5|= 0x1000;
+    PORTD->PCR[1] = 0x100;
+    PTD->PDDR |= 0x02;
+    PTD->PSOR = 0x02;// apagado (activo-bajo)
+
+	TPM0_set_square_wave(0.02); //50Hz
+	while (1){
+        int i;
+        for (i = 0; i < 100; i++) {
+            PTD->PTOR = 0x02; //toggle LED
+            delayMs(20);
+        }
+	} //generamos la señal
+
 }
 
 uint8_t TPM0_set_square_wave(uint8_t seconds){
