@@ -1,105 +1,57 @@
-#include <MKL25Z4.H>
-#include <stdio.h>
+#!/usr/bin/env python3
+"""
+Control del Dobot Magician desde Raspberry Pi 3
+usando UART (GPIO 14/15) y la librería pydobot
+"""
 
-//UART
-void UART0_Init(void) {
-    SIM->SCGC6 |= SIM_SCGC4_UART0_MASK; // Enable clock for UART0
-    SIM->SOPT2 |= SIM_SCGC5_PORTD_MASK; // Enable clock for PORTD
+import time
+import pydobot
 
-    //PTD2 RX y PTD3 Tx
-    PORTD->PCR[2] = PORT_PCR_MUX(3);
-    PORTD->PCR[3] = PORT_PCR_MUX(3);
+# Puerto UART de la Raspberry Pi
+PORT = "/dev/ttyS0"
 
-    SIM->SOPT2 |= 0x01000000; //48 Hz
+def main():
+    print("Conectando al Dobot Magician...")
+    
+    # Crear instancia del robot
+    # verbose=True imprime en consola cada comando enviado (útil para debug)
+    robot = pydobot.Dobot(port=PORT, verbose=False)
+    
+    print("¡Conectado!")
 
-    //baud rate 115200
-    uint16_t sbr = 26; //uint16_t es un tipo de dato sin signo de 16 bits, sbr significa "Serial Baud Rate" (tasa de baudios serial), se utiliza para calcular la velocidad de transmisión de datos en la comunicación UART. El valor de sbr se calcula utilizando la fórmula: sbr = (frecuencia del reloj) / (16 * baud rate)
-    UART0 -> BDH = (sbr >> 8) & UART_BDH_SBR_MASK;
-    UART0 -> BDL = (sbr & UART_BDL_SBR_MASK);
+    # --- Leer posición actual ---
+    (x, y, z, r, j1, j2, j3, j4) = robot.pose()
+    print(f"Posición actual → x:{x:.1f} y:{y:.1f} z:{z:.1f} r:{r:.1f}")
+    print(f"Ángulos joints → j1:{j1:.1f} j2:{j2:.1f} j3:{j3:.1f} j4:{j4:.1f}")
 
-    UART0 -> C4 = 15; //OSR - OverSampling Ratio: define cuántas veces muestrea RX cada bit recibido para asegurar una lectura correcta
-    UART0 -> C2 |= UART_C2_TE_MASK | UART_C2_RE_MASK; //Or para decir que se van a usar ambos bits, TE para Transmit Enable (habilitar transmisión) y RE para Receive Enable (habilitar recepción)
-}
+    # --- Ajustar velocidad y aceleración ---
+    # velocidad: 0-100, aceleración: 0-100
+    robot.speed(velocity=50, acceleration=50)
 
-//Para mandar un byte
-void UART0_SendByte(uint8_t data) {
-    while (!(UART0->S1 & UART_S1_TDRE_MASK)); // Espera hasta que el buffer de transmisión esté vacío
-    UART0->D = data; // Envía el byte
-}
+    # --- Movimientos de ejemplo ---
 
-//Para mandar un Buffer
-void UART0_SendBuffer(uint8_t*data, uint8_t length) {
-    for (int i = 0; i < length; i++) {
-        UART0_SendByte(data[i]); // Envía cada byte del buffer
-    }
-}
+    print("\n▶ Movimiento 1: ir a posición HOME")
+    robot.move_to(200, 0, 50, 0, wait=True)
+    time.sleep(0.5)
 
-//Para Checksum
-//(Checksum lo que hace es que verifica la integridad de los datos transmitidos, sumando todos los bytes del mensaje y tomando el complemento a uno del resultado. El receptor puede realizar la misma operación y comparar el resultado con el checksum recibido para asegurarse de que los datos no se han corrompido durante la transmisión.)
-uint8_t checksum(uint8_t*data, uint8_t lenght) {
-    uint8_t sum = 0; //inicializamos la variable
-    //vamos a usar un for para recorrer el buffer de datos, sumando cada byte al total
-    for (int i = 0; i < lenght; i++) {
-        sum += data[i]; //sumamos cada byte al total
-    }
-    return ~sum; //retornamos el complemento a uno del resultado
-}
+    print("▶ Movimiento 2: mover en X +50mm")
+    robot.move_to(250, 0, 50, 0, wait=True)
+    time.sleep(0.5)
 
-//TEST PARA MOVIMIENTO AAAA
-void Dobot_testmove(){
-    //Ojo!! esto es una prube inicial
-    uint8_t cmd[32]; //el cmd es el comando que se va a enviar al Dobot, es un arreglo de bytes que contiene la información del movimiento que queremos realizar
-    int i = 0;
+    print("▶ Movimiento 3: mover en Y +50mm")
+    robot.move_to(250, 50, 50, 0, wait=True)
+    time.sleep(0.5)
 
-    //header
-    cmd[i++] = 0xAA; //header del mensaje, es un byte que indica el inicio de un mensaje
-    cmd[i++] = 0xAA; //header del mensaje, es un byte que indica el inicio de un mensaje
+    print("▶ Movimiento 4: bajar en Z -30mm")
+    robot.move_to(250, 50, 20, 0, wait=True)
+    time.sleep(0.5)
 
-    //lenght
-    cmd[i++] = 0x0F;
+    print("▶ Regresando a posición inicial...")
+    robot.move_to(x, y, z, r, wait=True)
 
-    //id: identificador único, para identificación segura
-    //ptp command: precision time protocol, configura dispositivos para sincronizar sus relojs con más precisión
-    cmd[i++] = 0x54; //se usa 54 porque es el comando para movimiento PTP (Precision Time Protocol) en el Dobot, que permite controlar el movimiento del brazo robótico con precisión.
+    # --- Cerrar conexión ---
+    robot.close()
+    print("\n✅ Movimientos completados. Conexión cerrada.")
 
-    //control
-    cmd[i++] = 0x03; //write + queued
-
-    //Parámetros del movimiento
-    //(coordenadas en x, y, z, y r)
-    float x = 200.0f; //coordenada x a la que queremos mover el brazo robótico, se define como un número de punto flotante (float) para permitir valores decimales
-    float y = 0.0f;
-    float z = 50.0f;
-    float r = 0.0f;
-
-    uint8_t *px = (uint8_t*)&x;
-    uint8_t *py = (uint8_t*)&y;
-    uint8_t *pz = (uint8_t*)&z;
-    uint8_t *pr = (uint8_t*)&r;
-
-    //vamos a usar for para copiar los bytes de cada coordenada al cmd, usando un puntero para acceder a cada byte de la variable float
-    for(int j=0; j<4; j++) cmd[i++] = px[j];
-    for(int j=0; j<4; j++) cmd[i++] = py[j];
-    for(int j=0; j<4; j++) cmd[i++] = pz[j];
-    for(int j=0; j<4; j++) cmd[i++] = pr[j];
-
-    //checksum para validar los datos
-    cmd[i++] = checksum(cmd, i);
-
-    UART0_SendBuffer(cmd, i);
-}
-
-// main main main main main wuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu
-int main(void){
-    UART0_Init();
-
-    //delay simple
-    for (volatile int i=0; i< 1000000; i++);
-
-    //intento de movimiento (recemos)
-    Dobot_testmove();
-
-    while (1){
-
-    }
-}
+if __name__ == "__main__":
+    main()
