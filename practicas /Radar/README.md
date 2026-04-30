@@ -13,9 +13,9 @@
 <div align="center">
 </div>
 
-## Funcionamiento
+# Funcionamiento
 
-# Pruebas Individuales
+## Pruebas Individuales
 <div align="center">
   <img width=30% height=30% alt="WhatsApp Image 2026-04-30 at 10 30 40 AM" src="https://github.com/user-attachments/assets/12854e17-7bf8-4c10-8f02-f6eddb18d4ac" 
     />
@@ -23,6 +23,6 @@
     />
 </div>
 
-# Movimiento
+## Movimiento
 
-# Grafica
+## Grafica
