@@ -27,3 +27,8 @@ Para esta práctica, teneíamos que implementar un sistema utilizando la tarjeta
 ## Movimiento
 
 ## Grafica
+Para graficar, utilizamos matplot lib, la cuál nos permitió crear la siguiente gráfica:
+<div align="center">
+<img width="1197" height="1292" alt="image" src="https://github.com/user-attachments/assets/d9d182dd-756d-46a5-9e29-f4c0ea7bf767" />
+</div>
+En esta se muestra en un circulo representando los 360* de alcance que tiene el motor a pasos y muestra un radio de 25 cm, umbral utilizado para el sensor ultrasónico. Al pasar por comunicación serial la distancia y el ángulo es que podemos plasmar el objeto detectado dentro del radar. 
