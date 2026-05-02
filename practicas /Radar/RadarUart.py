@@ -1,62 +1,77 @@
-# 1ro Instalar: pip install pyserial matplotlib numpy
 import serial
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FuncAnimation
 
-# --- CONFIGURACIÓN ---
-PORT = 'COM3'  # Confirmar que el puerto este conectado aqui o cambiarlo
-BAUD = 9600
-ser = serial.Serial(PORT, BAUD, timeout=1) 
+PORT = 'COM5' #puerto
+BAUD = 9600 #baudios
 
-# Configuración de la figura Radar
-fig = plt.figure(figsize=(6,6))
+ser = serial.Serial(PORT, BAUD, timeout=1)
+
+fig = plt.figure(figsize=(8, 8))
 ax = fig.add_subplot(111, projection='polar')
-ax.set_theta_zero_location("N") # 0 grados arriba
-ax.set_theta_direction(-1)     # Sentido horario
-ax.set_ylim(0, 100)            # Ajusta esto al alcance máximo de tu sensor
+ax.set_theta_zero_location("N") # 0° arriba
+ax.set_theta_direction(-1) # Sentido horario
+ax.set_ylim(0, 25) # Distancia máxima
+ax.grid(True)
+ax.set_title("Radar Ultrasónico KL25", pad=20)
 
-# Almacenar los datos
 angles = []
 distances = []
 
+#actualizamos los datos  ------------------------------------------
 def update(frame):
-    if ser.in_waiting > 0:
+    global angles
+    global distances
+
+    while ser.in_waiting:
         try:
-            # Leer línea: "angulo,distancia"
+            #leemos UART -------------------------------
             line = ser.readline().decode('utf-8').strip()
-            if not line: return # Si hay timeout o línea vacía, salimos
-            
-            # Procesar datos
+            if not line:
+                return
+
+            # Hola para debug
+            if "HOLA" in line:
+                return
+
             parts = line.split(',')
-            if len(parts) == 2:
-                angle = int(parts[0])
-                dist = int(parts[1])
-                
-                # Convertir ángulo a radianes para matplotlib
-                angle_rad = np.radians(angle)
-                
-                # Para un efecto de "barrido", guardamos datos
-                # Si el ángulo es 0, limpiamos la lista para reiniciar el ciclo
-                if angle == 0:
-                    angles.clear()
-                    distances.clear()
-                
-                angles.append(angle_rad)
-                distances.append(dist)
-                
-                # Dibujar
-                ax.clear()
-                ax.set_theta_zero_location("N")
-                ax.set_theta_direction(-1)
-                ax.set_ylim(0, 100) # Rango máximo de detección
-                ax.scatter(angles, distances, c='red', s=10)
-        
-        except (ValueError, IndexError): # Ignora líneas corruptas 
+            if len(parts) != 2:
+                return
+            angle = int(parts[0])
+            
+            distance = float(parts[1]) #recibimos el float de la KL
+            # Ignorar timeout
+            if distance < 0:
+                return
 
-# Iniciar animación
-ani = FuncAnimation(fig, update, interval=10) # Refresco rápido
+            angle_rad = np.radians(angle) #radianes
+
+            #limpiamos antes de iniciar un nuevo barrido
+
+            if angle <= 1:
+                angles.clear()
+                distances.clear()
+
+            angles.append(angle_rad) #almacenamiento de ángulos
+            distances.append(distance) #almacenamiento de distancia
+
+            ax.clear()
+            ax.set_theta_zero_location("N")
+            ax.set_theta_direction(-1)
+            ax.set_ylim(0, 25)
+            ax.grid(True)
+            ax.set_title("Radar Ultrasónico KL25", pad=20)
+
+            # Puntos detectados
+            ax.scatter(angles, distances, s=20)
+
+            # Línea del barrido actual
+            ax.plot([angle_rad, angle_rad], [0, 25])
+
+        except:
+            pass
+
+ani = FuncAnimation(fig, update, interval=5)
 plt.show()
-
-# Cerrar puerto al cerrar la ventana
-ser.close()
+ser.close() #cerramos la comunicación serial
