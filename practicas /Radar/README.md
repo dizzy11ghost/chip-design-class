@@ -6,8 +6,9 @@
 Para esta práctica, teneíamos que implementar un sistema utilizando la tarjeta FRDM KL25z que fuera capaz de funcionar a modo de un radar. Esto por medio del uso de un sensor ultrasónico HC-SR04, un motor a pasos 28BYJ-48 de 5V y la conexión serial UART entre la tarjeta y la computadora. Nuestro sistema estaba separado por dos partes escenciales, la parte codificada en C en MCUExpresso, la cuál debía controlar el motor para que diera vueltas de 360 grados para poder revisar todo su entorno, y la parte del sensor ultrasónico, capaz de detectar obstáculos y su distancia con un umbral de 25 cm, y finalmente mandar esa detección de ángulo, distancia y posición por medio de UART 0. La segunda parte, codificada en Python, tenía que ser capaz de recibir por UART esos valores y plasmarlos en una gráfica que mostrara en dónde estaba el obstáculo detectado.
 
 ## Diagrama de flujo
+El funcionamiento de ambos códigos se muestra a continuación:
 <div align="center">
-  
+  <img width="561" height="983" alt="image" src="https://github.com/user-attachments/assets/eea27ab4-22c9-4591-99c7-08902b7c6c22" />
 </div>
 
 ## Esquemático del circuito utilizado 
