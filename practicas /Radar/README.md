@@ -1,4 +1,4 @@
-<img width="1200" height="1600" alt="image" src="https://github.com/user-attachments/assets/1a33eeb1-1e59-4421-a994-46d9b166d494" />#### Miguel Alonso De La Rosa Zamora A01646106 - Gregorio Alejandro Orozco Torres A01641967 - Sophia Leñero Gómez A01639462
+#### Miguel Alonso De La Rosa Zamora A01646106 - Gregorio Alejandro Orozco Torres A01641967 - Sophia Leñero Gómez A01639462
 
 # Radar
 
@@ -24,7 +24,7 @@ Durante cada paso, el sensor realizaba una medición de la distancia usando un p
 ## Gráfica
 Como expresado anteriormente, utilizamos la librería matplotlib para poder crear una gráfica polar de 360° por 25cm de radio para poder en ella desplegar en tiempo real los obstáculos que el sensor iba detectando y una línea dínámica que permitía visualizar la dirección del motor. La gráfica base se despliega a continuación:
 <div align="center">
-<img width="1197" height="1292" alt="image" src="https://github.com/user-attachments/assets/d9d182dd-756d-46a5-9e29-f4c0ea7bf767" />
+<img width=50% height=50% alt="image" src="https://github.com/user-attachments/assets/d9d182dd-756d-46a5-9e29-f4c0ea7bf767" />
 </div>
 
 ## Esquemático
@@ -47,8 +47,8 @@ Para poder trabajar de manera más eficiente, trabajamos inicialmente de manera 
 Finalmente, integramos todo en un prototipo final funcional, como se muestra en seguida: 
 <div align="center">
 <img width=40% height=40% alt="image" src="https://github.com/user-attachments/assets/b05c5f51-f78c-4692-9618-54c4e2306bae" />
-https://github.com/user-attachments/assets/6c865eb6-6c19-49cb-8b2e-65539ae27085
 </div>
+https://github.com/user-attachments/assets/6c865eb6-6c19-49cb-8b2e-65539ae27085
 
 
 
