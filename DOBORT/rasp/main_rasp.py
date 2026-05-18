@@ -6,7 +6,6 @@ import time
 GPIO.setmode(GPIO.BCM)
 ft1 = 23
 ft5 = 24
-
 GPIO.setup(ft1, GPIO.OUT)
 GPIO.setup(ft5, GPIO.OUT)
 
@@ -14,7 +13,6 @@ GPIO.setup(ft5, GPIO.OUT)
 cap = cv2.VideoCapture(0)
 lower_red1 = np.array([0,100,100])
 upper_red1 = np.array([10,255,255])
-
 lower_red2 = np.array([170,100,100])
 upper_red2 = np.array([180,255,255])
 
@@ -36,19 +34,23 @@ ft_simuladas = {
     "ft6": 0,
 }
 
-ultimo_color = None
+#Estados (más fácil hacer una máquina de estados para el flujo)
+IDLE = "IDLE"
+DETECTANDO = "DETECTANDO"
+DECIDIENDO = "DECIDIENDO"
+RUNNING = "RUNNING"
+
+estado = IDLE
+color_paquete = None
+
+frames_threshold = 15 #frames viendo el mismo color para poder comprobar que es el paquete
+contador_conf = 0
+color_candidato = None
 
 def leer_ft(nombre):
-    """Lee una fotoresistencia real o simulada."""
     if SIMULAR_FT:
         return ft_simuladas[nombre]
-    if nombre == "ft1":
-        return GPIO.input(ft1)
-    elif nombre == "ft2":
-        return GPIO.input(ft5)
-    else:
-        return ft_simuladas[nombre]  # resto aún simuladas
-
+    return GPIO.input(ft1 if nombre == "ft1" else ft5)
 
 #función bluetooth
 def bt_signal(msg):
@@ -57,105 +59,96 @@ def bt_signal(msg):
 def ejecutar_rutina_dobot(numero): 
     #simulando la rutina.. jeje
     print(f"[DOBOT]: ejecutando rutina guardada {numero}")
+    time.sleep(2)
+    #[insertar aqui rutinaaa]
+    print("rutina completada")
     bt_signal("Done")
 
-def detectar_area(mask):
-    #para encontrar la mayor área del color detectado
-    contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
-    mayor_area = 0
-    mejor_contorno = None
-
-    for contorno in contours:
-        area = cv2.contourArea(contorno)
-        if area > 500 and area > mayor_area:
-            mayor_area = area
-            mejor_contorno = contorno
-    return mejor_contorno, mayor_area
-
-def dibujar_rectangulo(frame, contorno, color, etiqueta):
-    if contorno is not None:
-        x, y, w, h = cv2.boundingRect(contorno)
-        cv2.rectangle(frame, (x,y), (x+w, y+h), color, 2)
-        cv2.putText(frame, etiqueta, (x, y -10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-
-def segun_color(color):
-    #Lógica de fotoresistencias y rutinas Dobot según el color detectado.
-    if color == "ROJO":
-        if leer_ft("ft1") == 0:
-            ejecutar_rutina_dobot(1)
-        elif leer_ft("ft4") == 0:
-            ejecutar_rutina_dobot(4)
-        else:
-            print("No hay espacio disponible para ROJO")
-            bt_signal("No hay espacios disponibles")
-
-    elif color == "AZUL":
-        if leer_ft("ft2") == 0:
-            ejecutar_rutina_dobot(2)
-        elif leer_ft("ft5") == 0:
-            ejecutar_rutina_dobot(5)
-        else:
-            print("No hay espacio disponible para AZUL")
-            bt_signal("No hay espacios disponibles")
-
-    elif color == "AMARILLO":
-        if leer_ft("ft3") == 0:
-            ejecutar_rutina_dobot(3)
-        elif leer_ft("ft6") == 0:
-            ejecutar_rutina_dobot(6)
-        else:
-            print("No hay espacio disponible para AMARILLO")
-            bt_signal("No hay espacios disponibles")
-
-#Main loop
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        break
-    #leemos sólo la parte inferior
-    height, width, _ = frame.shape
-    roi = frame[int(height*0.5):height, 0:width]
-    hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-
-    #máscaras de color
+def detectar_color(frame):
+    #devuelve rojo, azul, amarillo o None
+    height, width, _= frame.shape
+    roi = frame[int(height * 0.5):, :]
+    hsv = cv2.cvtColor(roi, cv2.COLOR_)
+    
     mask_red = (cv2.inRange(hsv, lower_red1, upper_red1)|cv2.inRange(hsv, lower_red2, upper_red2))
     mask_blue = cv2.inRange(hsv, lower_blue, upper_blue)
     mask_yellow = cv2.inRange(hsv, lower_yellow,upper_yellow)
 
-    #detectar áreas
-    contorno_red, area_red = detectar_area(mask_red)
-    contorno_blue, area_blue = detectar_area(mask_blue)
-    contorno_yellow, area_yellow = detectar_area(mask_yellow)
+    areas = {
+        "ROJO":     cv2.countNonZero(mask_red),
+        "AZUL":     cv2.countNonZero(mask_blue),
+        "AMARILLO": cv2.countNonZero(mask_yellow),
+    }
+    dominante = max(areas, key=areas.get)
+    return dominante if areas[dominante] > 500 else "NONE", roi, areas
 
-    #dibujar rectángulos
-    dibujar_rectangulo(roi, contorno_red, (0,0,255), "ROJO")
-    dibujar_rectangulo(roi, contorno_blue, (255,0,0), "AZUL")
-    dibujar_rectangulo(roi, contorno_yellow, (0,255,255), "AMARILLO")
+def decidir_rutina(color):
+    slots = {"ROJO": [("ft1", 1), ("ft4", 4)],
+            "AZUL": [("ft2", 2), ("ft5", 5)],
+            "AMARILLO": [("ft3", 3), ("ft6", 6)]}
+    for ft_nombre, rutina in slots[color]:
+        if leer_ft(ft_nombre) == 0:
+            return rutina
+        return None
 
-    #ver cuál es el color dominante
-    areas = {"ROJO": area_red, "AZUL": area_blue, "AMARILLO": area_yellow}
-    color_dominante = max(areas, key=areas.get)
+#Main loop
+print("Sistema iniciado. Esperando señal de bluetooth")
+estado = DETECTANDO
 
-    if areas[color_dominante] < 500:  # mismo threshold que detectar_area
-        color_dominante = "NONE"
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break
 
-    # Mostrar en el ROI (que es lo que se muestra)
-    cv2.putText(roi, f"Color: {color_dominante}", (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+    color_detectado, roi, areas = detectar_color(frame)
 
-    # Solo actuar cuando cambia el color detectado
-    if color_dominante != ultimo_color and color_dominante != "NONE":
-        print(f"[CAM]: Nuevo color detectado → {color_dominante}")
-        segun_color(color_dominante)
-        ultimo_color = color_dominante  # ✅ Actualizar después de procesar
-    elif color_dominante == "NONE":
-        ultimo_color = None  # Resetea cuando no hay color
+    if estado == DETECTANDO:
+        if color_detectado != "NONE":
+            if color_detectado == color_candidato:
+                contador_conf += 1 #para sumarle a la confirmación
+            else:
+                color_candidato = color_detectado
+                contador_conf = 1
+            if contador_confirmacion >= frames_threshold:
+                color_paquete         = color_candidato
+                estado                = DECIDIENDO
+                contador_confirmacion = 0
+                color_candidato       = None
+                print(f"[CAM] Color confirmado → {color_paquete}")
+        else:
+            # Ningún color visible → reinicia
+            color_candidato       = None
+            contador_confirmacion = 0
 
+    # decidiendo
+    elif estado == DECIDIENDO:
+        rutina = decidir_rutina(color_paquete)
+        if rutina is not None:
+            print(f"[SYS] Espacio disponible → rutina {rutina}")
+            estado = RUNNING
+        else:
+            print("[SYS] Sin espacio disponible.")
+            bt_signal("No hay espacios disponibles")
+            estado = IDLE          # o DETECTANDO si quieres reintentar
+
+    # llamar al brazo y regresar a IDL
+    elif estado == RUNNING:
+        ejecutar_rutina_dobot(rutina)
+        color_paquete = None
+        estado        = DETECTANDO     # listo para el siguiente paquete
+        print(f"[SYS] Estado → {estado}")
+
+    #user interface
+    estado_txt = f"Estado: {estado}"
+    color_txt  = f"Color: {color_detectado}  (candidato: {color_candidato} x{contador_confirmacion})"
+    cv2.putText(roi, estado_txt, (10, 30),  cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
+    cv2.putText(roi, color_txt,  (10, 60),  cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200,200,0),   2)
     cv2.imshow("Deteccion", roi)
+
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
 cap.release()
 cv2.destroyAllWindows()
-GPIO.cleanup()
+GPIO.cleanup()           
+    
