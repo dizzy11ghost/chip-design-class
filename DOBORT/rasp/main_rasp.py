@@ -14,9 +14,17 @@ with open('rutinas.json', 'r', encoding='utf-8') as archivo: #modo read y pasamo
 PORT = "/dev/ttyAMA0"
 GPIO.setmode(GPIO.BCM)
 ft1 = 23
-ft4 = 24
-GPIO.setup(ft1, GPIO.OUT)
-GPIO.setup(ft4, GPIO.OUT)
+ft2 = 24
+ft3 = 25
+ft4 = 27
+ft5 = 17
+ft6 = 22
+GPIO.setup(ft1, GPIO.IN)
+GPIO.setup(ft2, GPIO.IN)
+GPIO.setup(ft3, GPIO.IN)
+GPIO.setup(ft4, GPIO.IN)
+GPIO.setup(ft5, GPIO.IN)
+GPIO.setup(ft6, GPIO.IN)
 
 #Cámara  --------------------------------
 cap = cv2.VideoCapture(0)
@@ -33,14 +41,11 @@ upper_yellow = np.array([45,255,255])
 
 PINES_FT = {
     "ft1": ft1,
-    "ft4": ft4}
-# Simulación de fotoresistencias (busy=1, free=0)
-ft_simuladas = {
-    "ft2": 1,  # ocupado
-    "ft3": 0,
-    "ft5": 0,
-    "ft6": 0,
-}
+    "ft2": ft2,
+    "ft3": ft3,
+    "ft4": ft4,
+    "ft5": ft5																							,
+    "ft6": ft6}
 
 #Estados (más fácil hacer una máquina de estados para el flujo)
 IDLE = "IDLE"
@@ -106,19 +111,20 @@ def decidir_rutina(color):
 #Main loop
 print("Sistema iniciado. Esperando señal de bluetooth")
 
-while True:
-    #conexión inicial al dobot
-    print("Conectando al Dobot Magician...")
-    robot = pydobot.Dobot(port=PORT, verbose= False) #verbose imprime en consola
-    print("¡Conectado!")
+#conexión inicial al dobot
+print("Conectando al Dobot Magician...")
+robot = pydobot.Dobot(port=PORT, verbose= False) #verbose imprime en consola
+print("¡Conectado!")
     
-    (x, y, z, r, j1, j2, j3, j4) = robot.pose()
-    print(f"Posición actual → x:{x:.1f} y:{y:.1f} z:{z:.1f} r:{r:.1f}")
-    print(f"Ángulos joints → j1:{j1:.1f} j2:{j2:.1f} j3:{j3:.1f} j4:{j4:.1f}")
-    robot.speed(velocity=50, acceleration=50) #velocidad y aceleración van de 0 a 100
-    #posición Home
-    print("\n▶ Brazo a posición HOME")
-    robot.move_to(200, 0, 50, 0, wait=True)
+(x, y, z, r, j1, j2, j3, j4) = robot.pose()
+print(f"Posición actual → x:{x:.1f} y:{y:.1f} z:{z:.1f} r:{r:.1f}")
+print(f"Ángulos joints → j1:{j1:.1f} j2:{j2:.1f} j3:{j3:.1f} j4:{j4:.1f}")
+robot.speed(velocity=50, acceleration=50) #velocidad y aceleración van de 0 a 100
+#posición Home
+print("\n▶ Brazo a posición HOME")
+robot.move_to(200, 0, 50, 0, wait=True)
+
+while True:
     
     #ver cámara
     ret, frame = cap.read()
@@ -179,5 +185,4 @@ cap.release()
 cv2.destroyAllWindows()
 GPIO.cleanup()           
            
-    
     
