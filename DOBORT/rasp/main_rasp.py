@@ -5,9 +5,9 @@ import time
 
 GPIO.setmode(GPIO.BCM)
 ft1 = 23
-ft5 = 24
+ft4 = 24
 GPIO.setup(ft1, GPIO.OUT)
-GPIO.setup(ft5, GPIO.OUT)
+GPIO.setup(ft4, GPIO.OUT)
 
 #Cámara  --------------------------------
 cap = cv2.VideoCapture(0)
@@ -22,14 +22,13 @@ upper_blue = np.array([140,255,255])
 lower_yellow = np.array([22,93,0])
 upper_yellow = np.array([45,255,255])
 
+PINES_FT = {
+    "ft1": ft1,
+    "ft4": ft4}
 # Simulación de fotoresistencias (busy=1, free=0)
-# Solo ft1 y ft2 son reales; el resto simulados
-SIMULAR_FT = True  # Nota cambiar a False cuando tengas el hardware completo
 ft_simuladas = {
-    "ft1": 0,  # libre
     "ft2": 1,  # ocupado
     "ft3": 0,
-    "ft4": 1,
     "ft5": 0,
     "ft6": 0,
 }
@@ -40,21 +39,22 @@ DETECTANDO = "DETECTANDO"
 DECIDIENDO = "DECIDIENDO"
 RUNNING = "RUNNING"
 
-estado = IDLE
+estado = DETECTANDO
 color_paquete = None
+rutina_elegida = None
 
 frames_threshold = 15 #frames viendo el mismo color para poder comprobar que es el paquete
 contador_conf = 0
 color_candidato = None
 
-def leer_ft(nombre):
-    if SIMULAR_FT:
-        return ft_simuladas[nombre]
-    return GPIO.input(ft1 if nombre == "ft1" else ft5)
-
 #función bluetooth
 def bt_signal(msg):
     print(f"[BT]: {msg}")
+    
+def leer_ft(nombre):
+    if nombre in PINES_FT:
+        return GPIO.input(PINES_FT[nombre])
+    return ft_simuladas.get(nombre, 1)
 
 def ejecutar_rutina_dobot(numero): 
     #simulando la rutina.. jeje
@@ -68,7 +68,7 @@ def detectar_color(frame):
     #devuelve rojo, azul, amarillo o None
     height, width, _= frame.shape
     roi = frame[int(height * 0.5):, :]
-    hsv = cv2.cvtColor(roi, cv2.COLOR_)
+    hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
     
     mask_red = (cv2.inRange(hsv, lower_red1, upper_red1)|cv2.inRange(hsv, lower_red2, upper_red2))
     mask_blue = cv2.inRange(hsv, lower_blue, upper_blue)
@@ -86,14 +86,15 @@ def decidir_rutina(color):
     slots = {"ROJO": [("ft1", 1), ("ft4", 4)],
             "AZUL": [("ft2", 2), ("ft5", 5)],
             "AMARILLO": [("ft3", 3), ("ft6", 6)]}
-    for ft_nombre, rutina in slots[color]:
-        if leer_ft(ft_nombre) == 0:
-            return rutina
-        return None
+    for ft_nombre, numero_rutina in slots[color]:
+        valor = leer_ft(ft_nombre)
+        print(f"[FT]{ft_nombre} = {valor} ({"libre" if valor == 0 else "ocupado"})")
+        if valor == 0:
+            return numero_rutina
+    return None
 
 #Main loop
 print("Sistema iniciado. Esperando señal de bluetooth")
-estado = DETECTANDO
 
 while True:
     ret, frame = cap.read()
@@ -109,38 +110,40 @@ while True:
             else:
                 color_candidato = color_detectado
                 contador_conf = 1
-            if contador_confirmacion >= frames_threshold:
+            if contador_conf >= frames_threshold:
                 color_paquete         = color_candidato
                 estado                = DECIDIENDO
-                contador_confirmacion = 0
+                contador_conf = 0
                 color_candidato       = None
                 print(f"[CAM] Color confirmado → {color_paquete}")
         else:
             # Ningún color visible → reinicia
-            color_candidato       = None
-            contador_confirmacion = 0
+            color_candidato  = None
+            contador_conf = 0
 
     # decidiendo
     elif estado == DECIDIENDO:
-        rutina = decidir_rutina(color_paquete)
-        if rutina is not None:
-            print(f"[SYS] Espacio disponible → rutina {rutina}")
+        rutina_elegida = decidir_rutina(color_paquete)
+        if rutina_elegida is not None:
+            print(f"[SYS] Espacio disponible → rutina {rutina_elegida}")
             estado = RUNNING
         else:
             print("[SYS] Sin espacio disponible.")
             bt_signal("No hay espacios disponibles")
-            estado = IDLE          # o DETECTANDO si quieres reintentar
+            break          # o DETECTANDO si quieres reintentar
 
     # llamar al brazo y regresar a IDL
     elif estado == RUNNING:
-        ejecutar_rutina_dobot(rutina)
+        ejecutar_rutina_dobot(rutina_elegida)
+        rutina_elegida = None
         color_paquete = None
-        estado        = DETECTANDO     # listo para el siguiente paquete
-        print(f"[SYS] Estado → {estado}")
+        print ("rutina completada")
+        estado        = IDLE     # listo para el siguiente paquete
+        break
 
     #user interface
     estado_txt = f"Estado: {estado}"
-    color_txt  = f"Color: {color_detectado}  (candidato: {color_candidato} x{contador_confirmacion})"
+    color_txt  = f"Color: {color_detectado}  (candidato: {color_candidato} x{contador_conf })"
     cv2.putText(roi, estado_txt, (10, 30),  cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
     cv2.putText(roi, color_txt,  (10, 60),  cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200,200,0),   2)
     cv2.imshow("Deteccion", roi)
@@ -151,4 +154,5 @@ while True:
 cap.release()
 cv2.destroyAllWindows()
 GPIO.cleanup()           
+           
     
