@@ -17,3 +17,4 @@ La practica consiste en el diseño e implementación de un sistema de control in
 
 ## Funcionamiento
 - Video
+ [![Ver video](https://img.youtube.com/vi/DZJ4amev0x8.jpg)](https://youtu.be/DZJ4amev0x8)
