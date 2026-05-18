@@ -70,14 +70,59 @@ def leer_ft(nombre):
         return GPIO.input(PINES_FT[nombre])
     return ft_simuladas.get(nombre, 1)
 
-def ejecutar_rutina_dobot(numero): 
-    #simulando la rutina.. jeje
-    print(f"[DOBOT]: ejecutando rutina guardada {numero}")
-    time.sleep(2)
-    #[insertar aqui rutinaaa]
+def ejecutar_rutina_dobot(robot, rutinas, numero):
+    numero = str(numero)
+    # verificar existencia
+    if numero not in rutinas:
+        print(f"[ERROR] Rutina {numero} no encontrada")
+        return False
+    puntos = rutinas[numero]
+    print(f"\n[DOBOT] Ejecutando rutina {numero}")
     
-    print("rutina completada")
+    for i, p in enumerate(puntos):
+        print(f"\n[DOBOT] Punto {i}")
+        x = p["x"]
+        y = p["y"]
+        z = p["z"]
+        r = p["r"]
+        suction = p["suction"]
+
+        print(
+            f"X={x} "
+            f"Y={y} "
+            f"Z={z} "
+            f"R={r} "
+            f"SUC={suction}"
+        )
+
+        # mover brazo
+        robot.move_to(
+            x,
+            y,
+            z,
+            r,
+            wait=True
+        )
+
+        # controlar succión
+        try:
+            robot.suck(enable=suction)
+        except:
+            robot.suck(suction)
+
+        time.sleep(0.5)
+
+    # apagar succión al final
+    try:
+        robot.suck(False)
+    except:
+        pass
+
+    print(f"[DOBOT] Rutina {numero} completada")
+
     bt_signal("Done")
+
+    return True
 
 def detectar_color(frame): #devuelve sólo el color
     #inicialización de cámara
@@ -164,10 +209,11 @@ while True:
 
     # llamar al brazo y regresar a IDL
     elif estado == RUNNING:
-        ejecutar_rutina_dobot(rutina_elegida)
+        ok = ejecutar_rutina_dobot(robot, rutinas, rutina_elegida)
+        if ok:
+        print ("rutina completada")
         rutina_elegida = None
         color_paquete = None
-        print ("rutina completada")
         estado        = IDLE     # listo para el siguiente paquete
         break
 
