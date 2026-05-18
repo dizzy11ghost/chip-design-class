@@ -2,14 +2,13 @@
 teach_mode.py
 ─────────────────────────────────────────────────────────────
 Script independiente para grabar rutinas del Dobot Magician.
-Usa pydobot (igual que el script principal) y solo genera
-rutinas.json — no toca nada del sistema principal.
+Compatible con Thonny (sin termios/getch).
 
-Controles en terminal:
-  ENTER  → guarda la posición actual como siguiente punto
-  s      → toggle succión (ON/OFF en hardware y en el punto)
-  d      → descarta el último punto guardado
-  f      → finaliza y guarda la rutina en rutinas.json
+Controles:
+  ENTER  → guarda la posición actual
+  s      → toggle succión
+  d      → descarta último punto
+  f      → finalizar y guardar
   q      → salir sin guardar
 ─────────────────────────────────────────────────────────────
 """
@@ -17,12 +16,11 @@ Controles en terminal:
 import json
 import os
 import sys
-import tty
-import termios
+import time
 import pydobot
 
 # ── Config ────────────────────────────────────────────────────────────────────
-PORT         = '/dev/ttyAMA0'
+PORT = '/dev/ttyAMA0'
 RUTINAS_FILE = 'rutinas.json'
 
 SLOT_INFO = {
@@ -34,167 +32,290 @@ SLOT_INFO = {
     6: "AMARILLO – ft6",
 }
 
-# ── Lectura de tecla sin Enter ────────────────────────────────────────────────
-def getch() -> str:
-    fd  = sys.stdin.fileno()
-    old = termios.tcgetattr(fd)
-    try:
-        tty.setraw(fd)
-        ch = sys.stdin.read(1)
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old)
-    return ch
-
 # ── JSON helpers ──────────────────────────────────────────────────────────────
-def cargar_rutinas() -> dict:
+def cargar_rutinas():
     if os.path.exists(RUTINAS_FILE):
-        with open(RUTINAS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        try:
+            with open(RUTINAS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return {}
     return {}
 
-def guardar_rutinas(rutinas: dict):
+def guardar_rutinas(rutinas):
     with open(RUTINAS_FILE, 'w', encoding='utf-8') as f:
         json.dump(rutinas, f, indent=2, ensure_ascii=False)
+
     print(f"\n[TEACH] Guardado en '{RUTINAS_FILE}'")
 
 # ── Display ───────────────────────────────────────────────────────────────────
-def fmt_punto(p: dict, idx: int) -> str:
+def fmt_punto(p, idx):
     suc = "SUCCION ON" if p['suction'] else "succion off"
-    return f"  [{idx}] X={p['x']:7.2f}  Y={p['y']:7.2f}  Z={p['z']:7.2f}  R={p['r']:6.2f}  {suc}"
 
-def imprimir_rutina(puntos: list):
+    return (
+        f"  [{idx}] "
+        f"X={p['x']:7.2f}  "
+        f"Y={p['y']:7.2f}  "
+        f"Z={p['z']:7.2f}  "
+        f"R={p['r']:6.2f}  "
+        f"{suc}"
+    )
+
+def imprimir_rutina(puntos):
     if not puntos:
-        print("   (sin puntos todavia)")
+        print("   (sin puntos todavía)")
         return
+
     for i, p in enumerate(puntos):
         print(fmt_punto(p, i))
 
-# ── Grabado de una rutina ─────────────────────────────────────────────────────
-def grabar_rutina(robot: pydobot.Dobot, num_rutina: int) -> list:
-    puntos: list[dict] = []
+# ── Grabado de rutina ─────────────────────────────────────────────────────────
+def grabar_rutina(robot, num_rutina):
+
+    puntos = []
     suction_on = False
 
-    print(f"\n{'─'*52}")
-    print(f"  GRABANDO RUTINA {num_rutina}  ({SLOT_INFO.get(num_rutina, '?')})")
-    print(f"{'─'*52}")
-    print("  ENTER -> guardar posicion actual")
-    print("  s     -> toggle succion")
-    print("  d     -> descartar ultimo punto")
+    print(f"\n{'─'*55}")
+    print(f"  GRABANDO RUTINA {num_rutina}")
+    print(f"  {SLOT_INFO.get(num_rutina, '?')}")
+    print(f"{'─'*55}")
+
+    print("  ENTER -> guardar posición")
+    print("  s     -> toggle succión")
+    print("  d     -> borrar último punto")
     print("  f     -> finalizar y guardar")
-    print("  q     -> cancelar sin guardar")
-    print(f"{'─'*52}\n")
+    print("  q     -> cancelar")
+    print(f"{'─'*55}")
 
     while True:
-        (x, y, z, r, *_) = robot.pose()
+
+        try:
+            pose = robot.pose()
+
+            x = pose[0]
+            y = pose[1]
+            z = pose[2]
+            r = pose[3]
+
+        except Exception as e:
+            print("\n[ERROR] No se pudo leer pose:", e)
+            continue
 
         suc_tag = "SUC:ON " if suction_on else "suc:off"
-        sys.stdout.write(
-            f"\r  {suc_tag}  X={x:7.2f}  Y={y:7.2f}  Z={z:7.2f}  R={r:6.2f}"
-            "  | ENTER/s/d/f/q > "
+
+        print(
+            f"\n{suc_tag} "
+            f"X={x:7.2f}  "
+            f"Y={y:7.2f}  "
+            f"Z={z:7.2f}  "
+            f"R={r:6.2f}"
         )
-        sys.stdout.flush()
 
-        tecla = getch()
+        tecla = input("[ENTER/s/d/f/q] > ").strip().lower()
 
-        if tecla in ('\r', '\n'):           # ENTER — guardar punto
+        # ── Guardar punto ─────────────────────────
+        if tecla == '':
+
             punto = {
-                "x":       round(x, 2),
-                "y":       round(y, 2),
-                "z":       round(z, 2),
-                "r":       round(r, 2),
-                "suction": suction_on,
+                "x": round(x, 2),
+                "y": round(y, 2),
+                "z": round(z, 2),
+                "r": round(r, 2),
+                "suction": suction_on
             }
+
             puntos.append(punto)
-            print(f"\n  Punto {len(puntos)-1} guardado")
+
+            print(f"\n[PUNTO] Punto {len(puntos)-1} guardado")
             imprimir_rutina(puntos)
 
-        elif tecla == 's':                  # toggle succion
+        # ── Toggle succión ────────────────────────
+        elif tecla == 's':
+
             suction_on = not suction_on
-            robot.suck(suction_on)
+
+            try:
+                robot.suck(enable=suction_on)
+            except:
+                try:
+                    robot.suck(suction_on)
+                except Exception as e:
+                    print("[ERROR] Succión:", e)
+
             estado = "ON" if suction_on else "OFF"
-            print(f"\n  Succion -> {estado}")
 
-        elif tecla == 'd':                  # descartar ultimo
+            print(f"\n[SUCCION] {estado}")
+
+        # ── Borrar último ─────────────────────────
+        elif tecla == 'd':
+
             if puntos:
-                p = puntos.pop()
-                print(f"\n  Descartado: {fmt_punto(p, len(puntos))}")
-            else:
-                print("\n  (no hay puntos)")
 
-        elif tecla == 'f':                  # finalizar
-            if suction_on:
+                eliminado = puntos.pop()
+
+                print("\n[PUNTO] Eliminado:")
+                print(fmt_punto(eliminado, len(puntos)))
+
+            else:
+                print("\n[PUNTO] No hay puntos")
+
+        # ── Finalizar ─────────────────────────────
+        elif tecla == 'f':
+
+            try:
                 robot.suck(False)
+            except:
+                pass
+
             if not puntos:
-                print("\n  [TEACH] Rutina vacia, no se guarda.")
+                print("\n[TEACH] Rutina vacía")
                 return []
-            print(f"\n  Rutina {num_rutina} lista — {len(puntos)} punto(s).")
+
+            print(
+                f"\n[TEACH] Rutina {num_rutina} "
+                f"guardada con {len(puntos)} puntos"
+            )
+
             return puntos
 
-        elif tecla == 'q':                  # cancelar
-            if suction_on:
+        # ── Cancelar ──────────────────────────────
+        elif tecla == 'q':
+
+            try:
                 robot.suck(False)
-            print("\n  [TEACH] Cancelado.")
+            except:
+                pass
+
+            print("\n[TEACH] Cancelado")
+
             return []
 
-# ── Menu ──────────────────────────────────────────────────────────────────────
+        else:
+            print("\n[INFO] Comando no válido")
+
+        time.sleep(0.05)
+
+# ── Menú principal ────────────────────────────────────────────────────────────
 def menu():
+
     rutinas = cargar_rutinas()
 
     print("\n+================================================+")
-    print("|      DOBOT TEACH MODE  -  Grabar rutinas      |")
+    print("|      DOBOT TEACH MODE - Grabar rutinas        |")
     print("+================================================+")
-    print(f"  Rutinas guardadas: {list(rutinas.keys()) or 'ninguna'}\n")
+
+    print(
+        f"  Rutinas guardadas: "
+        f"{list(rutinas.keys()) if rutinas else 'ninguna'}\n"
+    )
 
     for num, desc in SLOT_INFO.items():
+
         marca = "[OK]" if str(num) in rutinas else "[  ]"
+
         print(f"  [{num}]  {desc:<22}  {marca}")
 
-    print("\n  [7]  Ver puntos de una rutina")
-    print("  [8]  Borrar una rutina")
-    print("  [0]  Salir\n")
+    print("\n  [7] Ver rutina")
+    print("  [8] Borrar rutina")
+    print("  [0] Salir\n")
 
-    op = input("  Opcion: ").strip()
+    op = input("Opción: ").strip()
 
+    # ── Grabar rutina ────────────────────────────
     if op in [str(n) for n in range(1, 7)]:
+
         num = int(op)
+
         if str(num) in rutinas:
-            r = input(f"  Rutina {num} ya existe. Sobreescribir? (s/N): ").strip().lower()
+
+            r = input(
+                f"Rutina {num} ya existe. "
+                f"Sobreescribir? (s/N): "
+            ).strip().lower()
+
             if r != 's':
                 return
 
-        print(f"\n[TEACH] Conectando al Dobot en {PORT}...")
-        robot = pydobot.Dobot(port=PORT, verbose=False)
-        print("[TEACH] Conectado. Mueve el brazo a mano (presiona boton para liberar motores).\n")
+        print(f"\n[TEACH] Conectando a Dobot en {PORT}...")
+
+        try:
+            robot = pydobot.Dobot(
+                port=PORT,
+                verbose=False
+            )
+
+        except Exception as e:
+            print("[ERROR] No se pudo conectar:", e)
+            return
+
+        print("[TEACH] Conectado")
+        print(
+            "Mueve el brazo manualmente "
+            "(usa el botón del Dobot para liberar motores)"
+        )
 
         puntos = grabar_rutina(robot, num)
-        robot.close()
+
+        try:
+            robot.close()
+        except:
+            pass
 
         if puntos:
             rutinas[str(num)] = puntos
             guardar_rutinas(rutinas)
 
+    # ── Ver rutina ───────────────────────────────
     elif op == '7':
-        n = input("  Numero de rutina: ").strip()
+
+        n = input("Número de rutina: ").strip()
+
         if n in rutinas:
-            print(f"\n  Rutina {n}:")
+
+            print(f"\nRutina {n}")
+            print("─" * 40)
+
             imprimir_rutina(rutinas[n])
-        else:
-            print("  No existe.")
 
+        else:
+            print("No existe")
+
+    # ── Borrar rutina ────────────────────────────
     elif op == '8':
-        n = input("  Numero de rutina a borrar: ").strip()
-        if n in rutinas:
-            del rutinas[n]
-            guardar_rutinas(rutinas)
-            print(f"  Rutina {n} borrada.")
-        else:
-            print("  No existe.")
 
+        n = input("Número de rutina a borrar: ").strip()
+
+        if n in rutinas:
+
+            del rutinas[n]
+
+            guardar_rutinas(rutinas)
+
+            print(f"Rutina {n} borrada")
+
+        else:
+            print("No existe")
+
+    # ── Salir ────────────────────────────────────
     elif op == '0':
+
+        print("\nSaliendo...")
         sys.exit(0)
 
-# ── Entry point ───────────────────────────────────────────────────────────────
+    else:
+        print("\nOpción inválida")
+
+# ── Main ──────────────────────────────────────────────────────────────────────
 if __name__ == '__main__':
+
     while True:
-        menu()
-        print()
+
+        try:
+            menu()
+
+        except KeyboardInterrupt:
+            print("\n\nInterrumpido por usuario")
+            sys.exit(0)
+
+        except Exception as e:
+            print("\n[ERROR GENERAL]", e)
