@@ -2,7 +2,16 @@ import cv2
 import numpy as np
 import RPi.GPIO as GPIO
 import time
+import pydobot
+from serial.tools import list_ports
+import json
 
+#Librería de rutinas del DOBOT
+with open('rutinas.json', 'r', encoding='utf-8') as archivo: #modo read y pasamos los datos a utf-8
+    rutinas = json.load(archivo)
+
+#iniciañozación pines y puertos Rasp ------
+PORT = "/dev/ttyAMA0"
 GPIO.setmode(GPIO.BCM)
 ft1 = 23
 ft4 = 24
@@ -61,11 +70,12 @@ def ejecutar_rutina_dobot(numero):
     print(f"[DOBOT]: ejecutando rutina guardada {numero}")
     time.sleep(2)
     #[insertar aqui rutinaaa]
+    
     print("rutina completada")
     bt_signal("Done")
 
-def detectar_color(frame):
-    #devuelve rojo, azul, amarillo o None
+def detectar_color(frame): #devuelve sólo el color
+    #inicialización de cámara
     height, width, _= frame.shape
     roi = frame[int(height * 0.5):, :]
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
@@ -97,6 +107,20 @@ def decidir_rutina(color):
 print("Sistema iniciado. Esperando señal de bluetooth")
 
 while True:
+    #conexión inicial al dobot
+    print("Conectando al Dobot Magician...")
+    robot = pydobot.Dobot(port=PORT, verbose= False) #verbose imprime en consola
+    print("¡Conectado!")
+    
+    (x, y, z, r, j1, j2, j3, j4) = robot.pose()
+    print(f"Posición actual → x:{x:.1f} y:{y:.1f} z:{z:.1f} r:{r:.1f}")
+    print(f"Ángulos joints → j1:{j1:.1f} j2:{j2:.1f} j3:{j3:.1f} j4:{j4:.1f}")
+    robot.speed(velocity=50, acceleration=50) #velocidad y aceleración van de 0 a 100
+    #posición Home
+    print("\n▶ Brazo a posición HOME")
+    robot.move_to(200, 0, 50, 0, wait=True)
+    
+    #ver cámara
     ret, frame = cap.read()
     if not ret:
         break
@@ -155,4 +179,5 @@ cap.release()
 cv2.destroyAllWindows()
 GPIO.cleanup()           
            
+    
     
