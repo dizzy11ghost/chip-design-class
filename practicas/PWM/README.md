@@ -7,7 +7,7 @@ La practica consiste en el diseño e implementación de un sistema de control in
 
 ## Diagrama de flujo(De la parte 3)
 <div align="center">
- 
+  <img width="7929" height="2743" alt="Blank diagram (2)" src="https://github.com/user-attachments/assets/fcf3b412-3c19-4fbf-9492-b924c5a2ed8d" />
 </div>
 
 ## Esquemático del circuito utilizado 
