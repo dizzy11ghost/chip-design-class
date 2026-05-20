@@ -14,3 +14,15 @@ Link a lugar para hacer los diagramas: https://lucid.app/lucidchart/20e2468b-787
 ## Pruebas iniciales visión computacional
 Primera prueba: test de máscaras para detección de colores rojo, azul y amarillo, destinados a las cajas 
 <img width="663" height="751" alt="Captura de pantalla 2026-05-16 214523" src="https://github.com/user-attachments/assets/d36b3435-01f2-4859-8697-a71c47ca201b" />
+
+
+Traceback (most recent call last):
+  File "/home/ingenierinis/GOAT/chip-design-class/DOBORT/pydobot/main_dobot.py", line 22, in <module>
+    GPIO.setup(pin, GPIO.IN)
+  File "/usr/lib/python3/dist-packages/RPi/GPIO/__init__.py", line 696, in setup
+    _check(lgpio.gpio_claim_input(_chip, gpio, {
+  File "/usr/lib/python3/dist-packages/lgpio.py", line 755, in gpio_claim_input
+    return _u2i(_lgpio._gpio_claim_input(handle&0xffff, lFlags, gpio))
+  File "/usr/lib/python3/dist-packages/lgpio.py", line 458, in _u2i
+    raise error(error_text(v))
+lgpio.error: 'GPIO busy'
