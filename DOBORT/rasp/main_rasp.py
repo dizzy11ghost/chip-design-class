@@ -5,28 +5,24 @@ import time
 import pydobot
 from serial.tools import list_ports
 import json
+import serial
+import threading
+import queue
 
 #Librería de rutinas del DOBOT
 with open('rutinas.json', 'r', encoding='utf-8') as archivo: #modo read y pasamos los datos a utf-8
     rutinas = json.load(archivo)
 
-#iniciañozación pines y puertos Rasp ------
+#inicialización pines y puertos Rasp -----------------------------------------
 PORT = "/dev/ttyAMA0"
 GPIO.setmode(GPIO.BCM)
-ft1 = 23
-ft2 = 24
-ft3 = 25
-ft4 = 27
-ft5 = 17
-ft6 = 22
-GPIO.setup(ft1, GPIO.IN)
-GPIO.setup(ft2, GPIO.IN)
-GPIO.setup(ft3, GPIO.IN)
-GPIO.setup(ft4, GPIO.IN)
-GPIO.setup(ft5, GPIO.IN)
-GPIO.setup(ft6, GPIO.IN)
+PINES_FT = {"ft1": 23, "ft2": 24, "ft3": 25, "ft4": 27, "ft5": 17, "ft6": 22}
+for pin in PINES_FT.values():
+    GPIO.setup(pin, GPIO.IN)
 
-#Cámara  --------------------------------
+ser = serial.Serial('/dev/rfcomm0', 9600, timeout=0.1) # Ajusta el puerto: /dev/rfcomm0 si es BT clásico
+
+#Cámara  --------------------------------------------------------------------
 cap = cv2.VideoCapture(0)
 lower_red1 = np.array([0,100,100])
 upper_red1 = np.array([10,255,255])
@@ -39,90 +35,62 @@ upper_blue = np.array([140,255,255])
 lower_yellow = np.array([22,93,0])
 upper_yellow = np.array([45,255,255])
 
-PINES_FT = {
-    "ft1": ft1,
-    "ft2": ft2,
-    "ft3": ft3,
-    "ft4": ft4,
-    "ft5": ft5																							,
-    "ft6": ft6}
-
-#Estados (más fácil hacer una máquina de estados para el flujo)
+#Estados (más fácil hacer una máquina de estados para el flujo) --------------
 IDLE = "IDLE"
 DETECTANDO = "DETECTANDO"
 DECIDIENDO = "DECIDIENDO"
 RUNNING = "RUNNING"
-
+RECIBIR = "RECIBIR"
+# -------------------------------------
 estado = DETECTANDO
 color_paquete = None
 rutina_elegida = None
+modo_actua = None #acomodar o recibir 
 
 frames_threshold = 15 #frames viendo el mismo color para poder comprobar que es el paquete
 contador_conf = 0
 color_candidato = None
 
-#función bluetooth
-def bt_signal(msg):
-    print(f"[BT]: {msg}")
-    
+bt_queue = queue.Queue() #cola para las señales recibidas
+
+#Módulos de bluetooth ---------------------------------------------------------
+"""
+Señales que recibe la RASP:
+RL: SLAVE - Carrito llegó con paquete (modo acomodar)
+RE: SLAVE - carrito en posición para recibir (modo recibir)
+R1,...,R6: MASTER - no hay espacio disponible
+
+Señales que envía la RASP:
+K2: SLAVE - brazo tomó el pquete
+KB: SLAVE - brazo terminó su rutina
+ME: MASTER - no hay espacio disponible
+"""
+def bt_send(destino, dato):
+    msg = (destino + dato).encode('ascii')
+    ser.write(msg)
+    print(f"[BT TX] → '{destino}{dato}'")
+
+def receive_loop():
+    """Hilo que escucha tramas entrantes del Slave."""
+    while True:
+        dest = ser.read(1)
+        if not dest:
+            continue
+        dato = ser.read(1)
+        if not dato:
+            continue
+
+        dest = dest.decode('ascii', errors='ignore')
+        dato = dato.decode('ascii', errors='ignore')
+        señal = dest + dato
+        print(f"[BT RX] ← '{señal}'")
+        bt_queue.put(señal)
+
+#----------------------------------------------------------------------------
 def leer_ft(nombre):
     if nombre in PINES_FT:
         return GPIO.input(PINES_FT[nombre])
-    return ft_simuladas.get(nombre, 1)
-
-def ejecutar_rutina_dobot(robot, rutinas, numero):
-    numero = str(numero)
-    # verificar existencia
-    if numero not in rutinas:
-        print(f"[ERROR] Rutina {numero} no encontrada")
-        return False
-    puntos = rutinas[numero]
-    print(f"\n[DOBOT] Ejecutando rutina {numero}")
-    
-    for i, p in enumerate(puntos):
-        print(f"\n[DOBOT] Punto {i}")
-        x = p["x"]
-        y = p["y"]
-        z = p["z"]
-        r = p["r"]
-        suction = p["suction"]
-
-        print(
-            f"X={x} "
-            f"Y={y} "
-            f"Z={z} "
-            f"R={r} "
-            f"SUC={suction}"
-        )
-
-        # mover brazo
-        robot.move_to(
-            x,
-            y,
-            z,
-            r,
-            wait=True
-        )
-
-        # controlar succión
-        try:
-            robot.suck(enable=suction)
-        except:
-            robot.suck(suction)
-
-        time.sleep(0.5)
-
-    # apagar succión al final
-    try:
-        robot.suck(False)
-    except:
-        pass
-
-    print(f"[DOBOT] Rutina {numero} completada")
-
-    bt_signal("Done")
-
-    return True
+    return 1 #si no existe asumimos que esta ocupado
 
 def detectar_color(frame): #devuelve sólo el color
     #inicialización de cámara
@@ -142,7 +110,9 @@ def detectar_color(frame): #devuelve sólo el color
     dominante = max(areas, key=areas.get)
     return dominante if areas[dominante] > 500 else "NONE", roi, areas
 
-def decidir_rutina(color):
+#rutinas ---------------------------------------------------------------------
+#rutina en modo acomodar
+def decidir_rutina_acomodar(color): #modo acomodar
     slots = {"ROJO": [("ft1", 1), ("ft4", 4)],
             "AZUL": [("ft2", 2), ("ft5", 5)],
             "AMARILLO": [("ft3", 3), ("ft6", 6)]}
@@ -153,31 +123,89 @@ def decidir_rutina(color):
             return numero_rutina
     return None
 
-#Main loop
-print("Sistema iniciado. Esperando señal de bluetooth")
+#Para verificar si la casilla solicitada tiene un paquete (ft ocupado), devuele la rutina correspondiente o None
+def verificar_rutina_recibir(numero):
+    ft_por_rutina = {1: "ft1", 2: "ft2", 3: "ft3", 4: "ft4", 5: "ft5", 6: "ft6"}
+    ft_nombre = ft_por_rutina.get(numero)
+    if ft_nombre is None:
+        return None
+    valor = leer_ft(ft_nombre)
+    print(f"[FT] {ft_nombre} = {valor} ({'ocupado' if valor == 1 else 'vacío'})")
+    return numero if valor == 1 else None  # 1 = ocupado = hay paquete
+
+def ejecutar_rutina_dobot(robot, numero):
+    clave = str(numero)
+    if clave not in rutinas:
+        print(f"[ERROR] Rutina {clave} no encontrada en rutinas.json")
+        return False
+    puntos = rutinas[clave]
+    print(f"[DOBOT] Ejecutando rutina {clave} ({len(puntos)} puntos)")
+    for i, p in enumerate(puntos):
+        print(f"  Punto {i}: x={p['x']} y={p['y']} z={p['z']} r={p['r']} suc={p['suction']}")
+        robot.move_to(p['x'], p['y'], p['z'], p['r'], wait=True)
+        try:
+            robot.suck(enable=p['suction'])
+        except TypeError:
+            robot.suck(p['suction'])
+        time.sleep(0.5)
+    try:
+        robot.suck(False)
+    except Exception:
+        pass
+    print(f"[DOBOT] Rutina {clave} completada")
+    return True
+
+    return True
+
+#Inicialización --------------------------------------------------------------
+print("Sistema iniciado. Iniciando hilo Bluetooth")
+t = threading.Thread(target=receive_loop, daemon=True)
+t.start()
 
 #conexión inicial al dobot
 print("Conectando al Dobot Magician...")
 robot = pydobot.Dobot(port=PORT, verbose= False) #verbose imprime en consola
 print("¡Conectado!")
-    
-(x, y, z, r, j1, j2, j3, j4) = robot.pose()
-print(f"Posición actual → x:{x:.1f} y:{y:.1f} z:{z:.1f} r:{r:.1f}")
-print(f"Ángulos joints → j1:{j1:.1f} j2:{j2:.1f} j3:{j3:.1f} j4:{j4:.1f}")
 robot.speed(velocity=50, acceleration=50) #velocidad y aceleración van de 0 a 100
-#posición Home
 print("\n▶ Brazo a posición HOME")
-robot.move_to(200, 0, 50, 0, wait=True)
+robot.move_to(50, 25, 50, 0, wait=True)
 
+#main loop -------------------------------------------------------------------
 while True:
-    
-    #ver cámara
+    while not bt_queue.epty(): #para leer las señales pendientes de bluetooth
+        señal=bt_queue.get()
+
+        #msj desde Slave, carrito llegó con un paquete y estamos en modo acomodar
+        if señal == "RL" and estado == IDLE:
+            modo_actual = "ACOMODAR"
+            estado = DETECTANDO
+            print("modo ACOMODAR activado")
+        #msj desde Slave, carrito llegó y espera recibir un paquete
+        elif señal == "RE" and estado == IDLE:
+            modo_actual = "RECIBIR"
+            estado = RECIBIR
+            print("modo RECIBIR activado")
+
+        elif señal[0] == "R" and señal[1].isdigit() and estado == RECIBIR:
+            numero = int(señal[1]) #vemos que R1, ..., R6 y de ahi escogemos
+            print(f"posición solicitada: {numero}")
+            rutina_valida = verificar_rutina_recibir(numero)
+            if rutina_valida is not None:
+                rutina_elegida = rutina_valida
+                estado = RUNNING
+                print(f"Casilla {numero} tiene paquete: ejecutando rutina")
+            else:
+                print(f"Casilla {numero} está vacía")
+                bt_send('M', 'E')
+                estado = IDLE #acaba rutina y se va a mimir zzz
+
+    #ver cámara ------------------------------
     ret, frame = cap.read()
     if not ret:
         break
-
     color_detectado, roi, areas = detectar_color(frame)
 
+    #Maquina de estados ------------------------------------------------------
     if estado == DETECTANDO:
         if color_detectado != "NONE":
             if color_detectado == color_candidato:
@@ -186,10 +214,10 @@ while True:
                 color_candidato = color_detectado
                 contador_conf = 1
             if contador_conf >= frames_threshold:
-                color_paquete         = color_candidato
-                estado                = DECIDIENDO
+                color_paquete = color_candidato
+                estado = DECIDIENDO
                 contador_conf = 0
-                color_candidato       = None
+                color_candidato = None
                 print(f"[CAM] Color confirmado → {color_paquete}")
         else:
             # Ningún color visible → reinicia
@@ -198,24 +226,29 @@ while True:
 
     # decidiendo
     elif estado == DECIDIENDO:
-        rutina_elegida = decidir_rutina(color_paquete)
+        rutina_elegida = decidir_rutina_acomodar(color_paquete)
         if rutina_elegida is not None:
             print(f"[SYS] Espacio disponible → rutina {rutina_elegida}")
             estado = RUNNING
         else:
-            print("[SYS] Sin espacio disponible.")
-            bt_signal("No hay espacios disponibles")
-            break          # o DETECTANDO si quieres reintentar
+            bt_send('M', 'E') # MASTER: no hay espacio
+            color_paquete = None
+            estado = IDLE
 
     # llamar al brazo y regresar a IDL
     elif estado == RUNNING:
-        ok = ejecutar_rutina_dobot(robot, rutinas, rutina_elegida)
+        ok = ejecutar_rutina_dobot(robot, rutina_elegida)
         if ok:
-        print ("rutina completada")
+            if modo_actual == "ACOMODAR":
+                bt_send('K', '2') # K2 a SLAVE: brazo tomó el paquete
+                bt_send('K', 'B') # KB a SLAVE: brazo terminó rutina
+            elif modo_actual == "RECIBIR":
+                bt_send('K', 'B')   # KB → SLAVE: brazo terminó rutina
         rutina_elegida = None
-        color_paquete = None
-        estado        = IDLE     # listo para el siguiente paquete
-        break
+        color_paquete  = None
+        modo_actual    = None
+        estado         = IDLE
+        print("estado IDLE")
 
     #user interface
     estado_txt = f"Estado: {estado}"
@@ -226,9 +259,11 @@ while True:
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
-
+robot.move_to(50, 25, 50, wait=True)
+ser.close()
 cap.release()
 cv2.destroyAllWindows()
 GPIO.cleanup()           
            
+    
     
