@@ -15,7 +15,14 @@ with open('rutinas.json', 'r', encoding='utf-8') as archivo:
 # ── GPIO ──────────────────────────────────────────────────────────────────────
 PORT = "/dev/ttyAMA0"
 GPIO.setmode(GPIO.BCM)
-PINES_FT = {"ft1": 23, "ft2": 24, "ft3": 25, "ft4": 27, "ft5": 17, "ft6": 22}
+PINES_FT = {
+    "ft1": 5,
+    "ft2": 6,
+    "ft3": 13,
+    "ft4": 19,
+    "ft5": 26,
+    "ft6": 16
+}
 for pin in PINES_FT.values():
     GPIO.setup(pin, GPIO.IN)
 
