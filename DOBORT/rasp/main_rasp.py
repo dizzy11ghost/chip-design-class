@@ -172,38 +172,43 @@ robot.move_to(50, 25, 50, 0, wait=True)
 
 #main loop -------------------------------------------------------------------
 while True:
-    while not bt_queue.epty(): #para leer las señales pendientes de bluetooth
-        señal=bt_queue.get()
+    while not bt_queue.empty():
+    señal = bt_queue.get()
+    print(f"[SYS] Procesando señal: '{señal}' | Estado: {estado}")
 
-        #msj desde Slave, carrito llegó con un paquete y estamos en modo acomodar
-        if señal == "RL" and estado == IDLE:
-            modo_actual = "ACOMODAR"
-            estado = DETECTANDO
-            print("modo ACOMODAR activado")
-        #msj desde Slave, carrito llegó y espera recibir un paquete
-        elif señal == "RE" and estado == IDLE:
+    # ── Señales del SLAVE ─────────────────────────────────────────────
+    if señal == "RL" and estado == IDLE:
+        modo_actual = "ACOMODAR"
+        estado      = DETECTANDO
+        print("[SYS] Modo ACOMODAR activado")
+
+    elif señal == "RE" and estado == IDLE:
+        modo_actual = "RECIBIR"
+        estado      = RECIBIR
+        print("[SYS] Modo RECIBIR → esperando posición del MASTER")
+
+    # ── Señales del MASTER (R1…R6) ────────────────────────────────────
+    # Separamos explícitamente para no confundir con RL o RE
+    elif señal in ("R1","R2","R3","R4","R5","R6"):
+        numero = int(señal[1])
+        print(f"[SYS] Posición solicitada: {numero} | Estado actual: {estado}")
+
+        if estado != RECIBIR:
+            # RE y R1-R6 llegaron casi juntos, forzamos el estado
+            print("[SYS] R1-R6 llegó antes de procesar RE, corrigiendo estado...")
             modo_actual = "RECIBIR"
-            estado = RECIBIR
-            print("modo RECIBIR activado")
+            estado      = RECIBIR
 
-        elif señal[0] == "R" and señal[1].isdigit() and estado == RECIBIR:
-            numero = int(señal[1]) #vemos que R1, ..., R6 y de ahi escogemos
-            print(f"posición solicitada: {numero}")
-            rutina_valida = verificar_rutina_recibir(numero)
-            if rutina_valida is not None:
-                rutina_elegida = rutina_valida
-                estado = RUNNING
-                print(f"Casilla {numero} tiene paquete: ejecutando rutina")
-            else:
-                print(f"Casilla {numero} está vacía")
-                bt_send('M', 'E')
-                estado = IDLE #acaba rutina y se va a mimir zzz
-
-    #ver cámara ------------------------------
-    ret, frame = cap.read()
-    if not ret:
-        break
-    color_detectado, roi, areas = detectar_color(frame)
+        rutina_valida = verificar_rutina_recibir(numero)
+        if rutina_valida is not None:
+            rutina_elegida = rutina_valida
+            estado         = RUNNING
+            print(f"[SYS] Casilla {numero} tiene paquete → rutina {rutina_elegida}")
+        else:
+            print(f"[SYS] Casilla {numero} vacía → ME al MASTER")
+            bt_send('M', 'E')
+            estado      = IDLE
+            modo_actual = None
 
     #Maquina de estados ------------------------------------------------------
     if estado == DETECTANDO:
