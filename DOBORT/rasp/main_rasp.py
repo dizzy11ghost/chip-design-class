@@ -8,12 +8,12 @@ import serial
 import threading
 import queue
 
-# ── Rutinas del DOBOT ─────────────────────────────────────────────────────────
+# Rutinas del dobot
 with open('rutinas.json', 'r', encoding='utf-8') as archivo:
     rutinas = json.load(archivo)
 
-# ── GPIO ──────────────────────────────────────────────────────────────────────
-PORT = "/dev/ttyAMA0"
+# configuración de pines GPIO
+PORT = "/dev/ttyAMA0" 
 GPIO.setmode(GPIO.BCM)
 PINES_FT = {
     "ft1": 5,
@@ -26,35 +26,37 @@ PINES_FT = {
 for pin in PINES_FT.values():
     GPIO.setup(pin, GPIO.IN)
 
-# ── Bluetooth ─────────────────────────────────────────────────────────────────
+# Bluetooth
 ser = serial.Serial('/dev/rfcomm0', 9600, timeout=0.1)
 
-# ── Cámara ────────────────────────────────────────────────────────────────────
+# filtro de color para la cámara
 cap = cv2.VideoCapture(0)
 lower_red1   = np.array([0,   100, 100]); upper_red1   = np.array([10,  255, 255])
 lower_red2   = np.array([170, 100, 100]); upper_red2   = np.array([180, 255, 255])
 lower_blue   = np.array([100, 100, 100]); upper_blue   = np.array([140, 255, 255])
 lower_yellow = np.array([22,  93,  0  ]); upper_yellow = np.array([45,  255, 255])
 
-# ── Estados ───────────────────────────────────────────────────────────────────
+# Estados
 IDLE       = "IDLE"
-DETECTANDO = "DETECTANDO"
+DETECTANDO = "DETECTANDO" #la cámara detecta qué paquete y qué color, para modo acomodar
 DECIDIENDO = "DECIDIENDO"
 RUNNING    = "RUNNING"
 RECIBIR    = "RECIBIR"
+ESPERANDO_RE = "ESPERANDO_RE" #espera la señal R1-R6 para decidir qué rutina ejecutar, para modo recibir
 
 estado         = IDLE
 color_paquete  = None
 rutina_elegida = None
 modo_actual    = None   # "ACOMODAR" | "RECIBIR"
+posicion_pendiente = None #Para guardar el valor de R1-R6 que llega antes de decidir el modo, para no perder esa información si llega antes de tiempo
 
-FRAMES_THRESHOLD  = 15
+FRAMES_THRESHOLD  = 20
 contador_conf     = 0
 color_candidato   = None
 
 bt_queue = queue.Queue()
 
-# ── Bluetooth ─────────────────────────────────────────────────────────────────
+# Bluetooth -------------------------------------------------------------------
 def bt_send(destino, dato):
     msg = (destino + dato).encode('ascii')
     ser.write(msg)
@@ -74,11 +76,11 @@ def receive_loop():
         print(f"[BT RX] ← '{señal}'")
         bt_queue.put(señal)
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# Funciones auxiliares ------------------------------------------------------
 def leer_ft(nombre):
     if nombre in PINES_FT:
         return GPIO.input(PINES_FT[nombre])
-    return 1  # asume ocupado si no existe
+    return 0  # asume libre si no existe
 
 def detectar_color(frame):
     height, width, _ = frame.shape
@@ -96,7 +98,7 @@ def detectar_color(frame):
     dominante = max(areas, key=areas.get)
     return (dominante if areas[dominante] > 500 else "NONE"), roi
 
-def decidir_rutina_acomodar(color):
+def decidir_rutina_acomodar(color): #para modo acomodar
     slots = {
         "ROJO":     [("ft1", 1), ("ft4", 4)],
         "AZUL":     [("ft2", 2), ("ft5", 5)],
@@ -118,7 +120,7 @@ def verificar_rutina_recibir(numero):
     print(f"[FT] {ft_nombre} = {valor} ({'ocupado' if valor == 1 else 'vacío'})")
     return numero if valor == 1 else None
 
-def ejecutar_rutina_dobot(robot, numero):
+def ejecutar_rutina_dobot(robot, numero): #cuando recibe RL o RE
     clave = str(numero)
     if clave not in rutinas:
         print(f"[ERROR] Rutina {clave} no encontrada")
@@ -140,17 +142,17 @@ def ejecutar_rutina_dobot(robot, numero):
     print(f"[DOBOT] Rutina {clave} completada")
     return True
 
-# ── Inicialización ────────────────────────────────────────────────────────────
+# Inicialización -------------------------------------------------------------
 print("[SYS] Iniciando hilo Bluetooth...")
 threading.Thread(target=receive_loop, daemon=True).start()
 
 print("[SYS] Conectando al Dobot Magician...")
 robot = pydobot.Dobot(port=PORT, verbose=False)
 print("[SYS] ¡Conectado!")
-robot.speed(velocity=50, acceleration=50)
-print("[SYS] Brazo a posición HOME")
-robot.move_to(50, 25, 50, 0, wait=True)
-print("[SYS] Listo. Esperando señal BT...")
+#robot.speed(velocity=50, acceleration=50)
+#print("[SYS] Brazo a posición HOME")
+#robot.move_to(250, 25, 50, 0, wait=True)
+print("Esperando señal BT...")
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
 roi            = None
@@ -158,55 +160,78 @@ color_detectado = "NONE"
 
 while True:
 
-    # 1. Señales BT — siempre primero, sin bloquear ───────────────────────────
+    # Señales BT -------------------------------------------------------------
     while not bt_queue.empty():
         señal = bt_queue.get()
-        print(f"[SYS] Señal recibida: '{señal}' | Estado: {estado}")
+        print(f"Señal recibida: '{señal}' | Estado: {estado}")
 
-        if señal == "RL" and estado == IDLE:
+        if señal == "RL" and estado == IDLE: #RL es para acomodar, RE es para recibir
             modo_actual = "ACOMODAR"
             estado      = DETECTANDO
-            print("[SYS] Modo ACOMODAR → DETECTANDO")
+            print("[SYS] Modo ACOMODAR →cámara detectando color del paquete")
 
         elif señal == "RE" and estado == IDLE:
-            modo_actual = "RECIBIR"
-            estado      = RECIBIR
-            print("[SYS] Modo RECIBIR → esperando posición del MASTER")
+            if estado == IDLE:
+                # RE llegó primero, esperamos R1-R6
+                modo_actual = "RECIBIR"
+                estado      = RECIBIR
+                print("Modo RECIBIR activado → esperando R1-R6 del MASTER...")
+            elif estado == ESPERANDO_RE:
+                # R1-R6 ya llegó antes que RE, ahora sí podemos ejecutar
+                print(f"RE recibido, posición elegida: {posicion_pendiente} → ejecutando rutina")
+                modo_actual = "RECIBIR"
+                rutina_valida = verificar_rutina_recibir(posicion_pendiente)
+                if rutina_valida is not None:
+                    rutina_elegida     = rutina_valida
+                    posicion_pendiente = None
+                    estado             = RUNNING
+                    print(f"Casilla {rutina_elegida} ocupada → iniciando rutina {rutina_elegida}")
+                else:
+                    print(f"[SYS] Casilla {posicion_pendiente} vacía → ME al MASTER")
+                    bt_send('M', 'E')
+                    posicion_pendiente = None
+                    modo_actual        = None
+                    estado             = IDLE
 
         elif señal in ("R1","R2","R3","R4","R5","R6"):
             numero = int(señal[1])
-            print(f"[SYS] Posición solicitada: {numero} | Estado: {estado}")
+            print(f"Posición solicitada: {numero} | Estado: {estado}")
             # Tolerancia: RE y R1-R6 pueden llegar casi juntos
-            if estado not in (RECIBIR, IDLE):
-                print("[WARN] R1-R6 recibido en estado inesperado, ignorando")
-            else:
-                if estado == IDLE:
-                    print("[SYS] Forzando modo RECIBIR por llegada anticipada")
-                    modo_actual = "RECIBIR"
-                    estado      = RECIBIR
+            if estado == RECIBIR:
                 rutina_valida = verificar_rutina_recibir(numero)
                 if rutina_valida is not None:
                     rutina_elegida = rutina_valida
                     estado         = RUNNING
-                    print(f"[SYS] Casilla {numero} ocupada → rutina {rutina_elegida}")
+                    print(f"[SYS] Casilla {numero} ocupada → iniciando rutina {rutina_elegida}")
                 else:
                     print(f"[SYS] Casilla {numero} vacía → ME al MASTER")
                     bt_send('M', 'E')
-                    estado      = IDLE
                     modo_actual = None
+                    estado      = IDLE
 
-    # 2. Leer cámara (siempre, para mantener el buffer fresco) ────────────────
-    ret, frame = cap.read()
+            elif estado == IDLE:
+                # R1-R6 llegó antes que RE, guardamos y esperamos RE
+                posicion_pendiente = numero
+                estado             = ESPERANDO_RE
+                print(f"[SYS] R{numero} llegó antes que RE → guardando posición, esperando RE...")
+
+            else:
+                print(f"[WARN] R{numero} recibido en estado inesperado: {estado}, ignorando")
+
+        else:
+            print(f"[WARN] Señal desconocida o ignorada: '{señal}' en estado {estado}")
+
+    # Leer cámara (siempre, para mantener el buffer fresco)
     if ret and frame is not None:
         color_detectado, roi = detectar_color(frame)
     else:
         time.sleep(0.05)
 
-    # 3. Máquina de estados ────────────────────────────────────────────────────
-    if estado == DETECTANDO:
+    # Máquina de estados ------------------------------------------------------
+    if estado == DETECTANDO: #sólo llamamod a detectando cuando el modo es acomodar, porque ahí es cuando la cámara tiene que detectar el color del paquete para decidir la rutina. En recibir no importa el color, sólo la posición del MASTER
         if color_detectado != "NONE":
             if color_detectado == color_candidato:
-                contador_conf += 1
+                contador_conf += 1 #contador_conf es para el threshold de frames para confirmar el color
             else:
                 color_candidato = color_detectado
                 contador_conf   = 1
@@ -215,12 +240,12 @@ while True:
                 estado          = DECIDIENDO
                 contador_conf   = 0
                 color_candidato = None
-                print(f"[CAM] Color confirmado → {color_paquete}")
+                print(f"Color confirmado → {color_paquete}")
         else:
             color_candidato = None
             contador_conf   = 0
 
-    elif estado == DECIDIENDO:
+    elif estado == DECIDIENDO: #decide qué rutina usar para acomodar, dependiendo del color detectado. Si el modo es recibir, no se decide rutina, se espera la señal R1-R6 para decidir la rutina
         rutina_elegida = decidir_rutina_acomodar(color_paquete)
         if rutina_elegida is not None:
             print(f"[SYS] Slot libre → rutina {rutina_elegida}")
@@ -233,6 +258,7 @@ while True:
             estado        = IDLE
 
     elif estado == RUNNING:
+        print(f"[SYS] Iniciando ejecución → rutina {rutina_elegida} | Modo: {modo_actual}")
         ok = ejecutar_rutina_dobot(robot, rutina_elegida)
         if ok:
             if modo_actual == "ACOMODAR":
@@ -247,7 +273,7 @@ while True:
         estado          = IDLE
         print("[SYS] → IDLE")
 
-    # 4. UI ───────────────────────────────────────────────────────────────────
+    # 4. UI 
     if roi is not None:
         cv2.putText(roi, f"Estado: {estado} | Modo: {modo_actual}",
                     (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,255,255), 2)
@@ -258,7 +284,7 @@ while True:
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
-# ── Cleanup ───────────────────────────────────────────────────────────────────
+# Cleanup
 robot.move_to(50, 25, 50, 0, wait=True)
 ser.close()
 cap.release()
