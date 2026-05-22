@@ -155,6 +155,7 @@ print("[SYS] ¡Conectado!")
 print("Esperando señal BT...")
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
+frame, ret = cap.read()
 roi            = None
 color_detectado = "NONE"
 
@@ -186,40 +187,74 @@ while True:
                     posicion_pendiente = None
                     estado             = RUNNING
                     print(f"Casilla {rutina_elegida} ocupada → iniciando rutina {rutina_elegida}")
+                    bt_send('M', 'N')
+
                 else:
                     print(f"[SYS] Casilla {posicion_pendiente} vacía → ME al MASTER")
-                    bt_send('M', 'E')
+                    bt_send('M', 'N')
                     posicion_pendiente = None
                     modo_actual        = None
                     estado             = IDLE
 
         elif señal in ("R1","R2","R3","R4","R5","R6"):
             numero = int(señal[1])
-            print(f"Posición solicitada: {numero} | Estado: {estado}")
-            # Tolerancia: RE y R1-R6 pueden llegar casi juntos
-            if estado == RECIBIR:
+            print(f"[BT] Posición solicitada: {numero} | Estado: {estado}")
+
+            if estado in (RECIBIR, IDLE, ESPERANDO_RE):
+                # primero verificamos si hay paquete en esa casilla
                 rutina_valida = verificar_rutina_recibir(numero)
+
                 if rutina_valida is not None:
-                    rutina_elegida = rutina_valida
-                    estado         = RUNNING
-                    print(f"[SYS] Casilla {numero} ocupada → iniciando rutina {rutina_elegida}")
+                    # hay paquete → avisamos al MASTER y esperamos RE del SLAVE
+                    print(f"[SYS] Casilla {numero} tiene paquete → MS al MASTER")
+                    bt_send('M', 'S')          # MS → MASTER: hay paquete
+                    posicion_pendiente = numero
+                    modo_actual        = "RECIBIR"
+
+                    if estado == RECIBIR:
+                        # RE ya llegó antes → ejecutar directo
+                        print("[SYS] RE ya estaba → ejecutando rutina directamente")
+                        rutina_elegida     = rutina_valida
+                        posicion_pendiente = None
+                        estado             = RUNNING
+                    else:
+                        # esperamos RE del SLAVE para confirmar que el carrito está listo
+                        estado = ESPERANDO_RE
+                        print(f"[SYS] Esperando RE del SLAVE para ejecutar rutina {numero}...")
+
                 else:
-                    print(f"[SYS] Casilla {numero} vacía → ME al MASTER")
-                    bt_send('M', 'E')
-                    modo_actual = None
-                    estado      = IDLE
-
-            elif estado == IDLE:
-                # R1-R6 llegó antes que RE, guardamos y esperamos RE
-                posicion_pendiente = numero
-                estado             = ESPERANDO_RE
-                print(f"[SYS] R{numero} llegó antes que RE → guardando posición, esperando RE...")
-
+                    # no hay paquete → avisamos al MASTER
+                    print(f"[SYS] Casilla {numero} vacía → MN al MASTER")
+                    bt_send('M', 'N')          # MN → MASTER: no hay paquete
+                    posicion_pendiente = None
+                    modo_actual        = None
+                    estado             = IDLE
             else:
-                print(f"[WARN] R{numero} recibido en estado inesperado: {estado}, ignorando")
+                print(f"[WARN] R{numero} en estado inesperado: {estado}, ignorando")
 
-        else:
-            print(f"[WARN] Señal desconocida o ignorada: '{señal}' en estado {estado}")
+        elif señal == "RE":
+            if estado == IDLE:
+                modo_actual = "RECIBIR"
+                estado      = RECIBIR
+                print("[SYS] RE recibido → esperando R1-R6 del MASTER...")
+
+            elif estado == ESPERANDO_RE:
+                # teníamos posición pendiente, ahora el carrito confirmó que está listo
+                print(f"[SYS] RE recibido, ejecutando rutina pendiente: {posicion_pendiente}")
+                rutina_valida = verificar_rutina_recibir(posicion_pendiente)
+                if rutina_valida is not None:
+                    rutina_elegida     = rutina_valida
+                    posicion_pendiente = None
+                    estado             = RUNNING
+                    print(f"[SYS] Iniciando rutina {rutina_elegida}")
+                else:
+                    print(f"[SYS] Casilla ya no tiene paquete → MN al MASTER")
+                    bt_send('M', 'N')
+                    posicion_pendiente = None
+                    modo_actual        = None
+                    estado             = IDLE
+            else:
+                print(f"[WARN] RE en estado inesperado: {estado}, ignorando")
 
     # Leer cámara (siempre, para mantener el buffer fresco)
     if ret and frame is not None:
