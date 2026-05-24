@@ -2,11 +2,12 @@
 Diagrama sistema completo:
 <img width="1015" height="972" alt="image" src="https://github.com/user-attachments/assets/b8487263-3fbc-4e14-950b-1612c15813dd" />
 
-Diagrama Raspberry Pi: 
-<img width="975" height="994" alt="image" src="https://github.com/user-attachments/assets/04761da8-99e9-40ce-82e9-112ef46b9aa7" />
+Diagrama FSM Raspberry Pi: 
+<img width="799" height="780" alt="image" src="https://github.com/user-attachments/assets/46ffa5ce-094c-4d5a-9d4f-772b2fe98ff9" />
 
 Diagrama mensajes bluetooth:
 <img width="1054" height="742" alt="image" src="https://github.com/user-attachments/assets/d374806c-7026-4146-a164-d1ddabf33bb0" />
+
 
 Link a lugar para hacer los diagramas: https://lucid.app/lucidchart/20e2468b-7871-4546-8c00-b95ea3eb9a92/edit?viewport_loc=6243%2C-1367%2C2546%2C1248%2C0_0&invitationId=inv_3f67f78b-2500-4cd6-b22b-de2e897b06b3
 
