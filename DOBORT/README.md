@@ -3,7 +3,7 @@ Diagrama sistema completo:
 <img width="1015" height="972" alt="image" src="https://github.com/user-attachments/assets/b8487263-3fbc-4e14-950b-1612c15813dd" />
 
 Diagrama FSM Raspberry Pi: 
-<img width="799" height="780" alt="image" src="https://github.com/user-attachments/assets/46ffa5ce-094c-4d5a-9d4f-772b2fe98ff9" />
+<img width="952" height="926" alt="image" src="https://github.com/user-attachments/assets/93181754-f01d-48a9-9ef8-7c5a2aee3e1e" />
 
 Diagrama mensajes bluetooth:
 <img width="1054" height="742" alt="image" src="https://github.com/user-attachments/assets/d374806c-7026-4146-a164-d1ddabf33bb0" />
