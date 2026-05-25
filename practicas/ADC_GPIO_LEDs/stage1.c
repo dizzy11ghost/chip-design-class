@@ -33,14 +33,11 @@ static void vTaskButtonPolling(void *pvParameters);
 static void vTaskLedControl(void *pvParameters);
 static void vTaskSerialMonitor(void *pvParameters);
 
-// Declaración de tareas
-void vTaskBoton( void *pvParameters );
-
 int main(void) {
     /* Init board hardware. */
     BOARD_InitBootPins();
     BOARD_InitBootClocks();
-    BOARD_InitBootPeripherals();
+    BOARD_InitDebugConsole();
 
     adc16_config_t adc16ConfigStruct;
     ADC16_GetDefaultConfig(&adc16ConfigStruct);
@@ -50,14 +47,13 @@ int main(void) {
     ADC16_EnableHardwareTrigger(ADC_BASE, false);
     ADC16_DoAutoCalibration(ADC_BASE);
 
-    PRINTF("FreeRTOS KL25z - Tasks with sensors without queues or interruptions\r\n")
+    PRINTF("FreeRTOS KL25z - Tasks with sensors without queues or interruptions\r\n");
 
-    // Definición de tareas
+	// Tareas
     xTaskCreate(vTaskBoton, "Light", configMINIMAL_STACK_SIZE + 100,
     		NULL,
     		2,
     		NULL);
-    // Inciamos las tareas
     xTaskCreate(vTaskTemperatureSensor,
     "Temp",
     configMINIMAL_STACK_SIZE + 100,
