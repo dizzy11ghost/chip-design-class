@@ -292,23 +292,31 @@ while True:
             nav_signal           = "KCB"
             nav_siguiente_estado = RUN
             estado               = NAVEGAR
+            bt_send("carro", nav_signal)  # ← start signal ANTES de entrar a NAVEGAR
+            print(f"[NAV] Start signal enviada: {nav_signal}")
         else:
             print("Sin espacio → ME al MASTER")
             bt_send("master", 'M', 'E')
             estado = IDLE
 
     elif estado == NAVEGAR:
-        # FIX: posiciones ya están actualizadas arriba en cada frame
         distancia = calcular_distancia(posiciones, nav_origen, nav_destino)
         if distancia is not None:
-            distancia_cm = distancia * 100
-            print(f"[NAV] {distancia_cm:.1f} cm → señal {nav_signal}")
-            bt_send("carro", nav_signal, f"{distancia_cm:.1f}")  # manda distancia cada frame hasta llegar
+            distancia_cm = int(distancia * 100)
+            distancia_cm = min(distancia_cm, 999)  # clamp para no pasarte de 3 dígitos
+            
+            centenas = (distancia_cm // 100) % 10
+            decenas  = (distancia_cm //  10) % 10
+            unidades =  distancia_cm         % 10
+
+            bt_send("carro", str(centenas))
+            bt_send("carro", str(decenas))
+            bt_send("carro", str(unidades))
+            print(f"[NAV] {distancia_cm} cm → {centenas}{decenas}{unidades}")
 
             if distancia_cm <= DISTANCIA_LLEGADA_CM:
                 print("[NAV] Destino alcanzado")
                 estado = nav_siguiente_estado
-        # si no se ven los markers simplemente espera el siguiente frame
 
     elif estado == RUN:
         print(f"[SYS] Iniciando ejecución → rutina {rutina_elegida} | Modo: {modo_actual}")
@@ -317,6 +325,7 @@ while True:
             if modo_actual == ACOMODAR:
                 # FIX: tras depositar, navegar brazo→usuario y avisar ML al master
                 bt_send("master", 'M', 'L')
+                bt_send("carro", "KBU")
                 nav_origen           = ARUCO_BRAZO
                 nav_destino          = ARUCO_USUARIO
                 nav_signal           = "KBU"
