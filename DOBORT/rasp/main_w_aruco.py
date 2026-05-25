@@ -47,22 +47,29 @@ for pin in PINES_FT.values():
     GPIO.setup(pin, GPIO.IN)
 
 # Bluetooth ----------------------------------------------------
-ser = serial.Serial('/dev/rfcomm0', 9600, timeout=0.1)
-bt_queue = queue.Queue()
+ser_master = serial.Serial('/dev/rfcomm0', 9600, timeout=0.1)  # Master (comm0)
+ser_carro  = serial.Serial('/dev/rfcomm1', 9600, timeout=0.1)  # Carro  (comm1)
+
+bt_queue_master = queue.Queue()
+bt_queue_carro  = queue.Queue()
 
 """
 Señales que mandamos: 
 al carro: KBU (distancia brazo usuario), KUB(distancia usuario brazo), distancia (3 valores cm)
 master: MS (casilla ocupada), MN (casilla vacía), ME (sin espacio), ML (paquete depositado), MR(paquete mandado)
 """
-def bt_send(*args):
+def bt_send(destino, *args):
     msg = ''.join(map(str, args))
-    ser.write((msg + '\n').encode())
-    print(f"[BT TX] → '{msg}'")
+    if destino == "master":
+        ser_master.write((msg + '\n').encode())
+        print(f"[BT TX → MASTER] '{msg}'")
+    elif destino == "carro":
+        ser_carro.write((msg + '\n').encode())
+        print(f"[BT TX → CARRO] '{msg}'")
 
 #Señales que recibimos (sólo de Master): RS (start modo 1), R1-R6 (modo 2, posicion del slot)
 
-def receive_loop():
+def receive_loop(ser, bt_queue, nombre):
     while True:
         dest = ser.read(1)
         if not dest:
@@ -73,7 +80,7 @@ def receive_loop():
         dest  = dest.decode('ascii', errors='ignore')
         dato  = dato.decode('ascii', errors='ignore')
         señal = dest + dato
-        print(f"[BT RX] ← '{señal}'")
+        print(f"[BT RX ← {nombre}] '{señal}'")
         bt_queue.put(señal)
 
 #Cámara ------------------------------------------------------
@@ -198,7 +205,14 @@ nav_siguiente_estado = None
 
 # Inicialización -------------------------------------------------------------
 print("Iniciando hilo Bluetooth...")
-threading.Thread(target=receive_loop, daemon=True).start()
+#threading
+threading.Thread(target=receive_loop,
+                 args=(ser_master, bt_queue_master, "MASTER"),
+                 daemon=True).start()
+
+threading.Thread(target=receive_loop,
+                 args=(ser_carro,  bt_queue_carro,  "CARRO"),
+                 daemon=True).start()
 print("Conectando al Dobot Magician...")
 robot = pydobot.Dobot(port=PORT, verbose=False)
 print("¡Conectado!")
@@ -220,8 +234,8 @@ while True:
         continue
 
     # Señales BT -------------------------------------------------------------
-    while not bt_queue.empty():
-        señal = bt_queue.get()
+    while not bt_queue_master.empty():
+        señal = bt_queue_master.get()
         print(f"Estado: {estado}")
 
         #START ACOMODAR 
@@ -237,7 +251,7 @@ while True:
             numero = int(señal[1])
             rutina_valida = verificar_rutina_recibir(numero)
             if rutina_valida is not None:
-                bt_send('M', 'S')
+                bt_send("master", 'M', 'S')
                 rutina_elegida = numero
                 modo_actual    = RECIBIR
                 # FIX: modo RECIBIR navega carro→brazo primero, igual que ACOMODAR
@@ -246,9 +260,9 @@ while True:
                 nav_signal           = "KCB"
                 nav_siguiente_estado = RUN
                 estado               = NAVEGAR
-                print(f"NAVEGAR → RUN rutina {numero}")
+                print(f"[FSM] NAVEGAR → RUN rutina {numero}")
             else:
-                bt_send('M', 'N', '0')
+                bt_send("master", 'M', 'N', '0')
                 print(f"casilla {numero} vacía, no se puede recibir ahí")
 
     # Máquina de estados ------------------------------------------------------
@@ -280,7 +294,7 @@ while True:
             estado               = NAVEGAR
         else:
             print("Sin espacio → ME al MASTER")
-            bt_send('M', 'E')
+            bt_send("master", 'M', 'E')
             estado = IDLE
 
     elif estado == NAVEGAR:
@@ -288,32 +302,32 @@ while True:
         distancia = calcular_distancia(posiciones, nav_origen, nav_destino)
         if distancia is not None:
             distancia_cm = distancia * 100
-            print(f"{distancia_cm:.1f} cm → señal {nav_signal}")
-            bt_send(nav_signal, f"{distancia_cm:.1f}")  # manda distancia cada frame hasta llegar
+            print(f"[NAV] {distancia_cm:.1f} cm → señal {nav_signal}")
+            bt_send("carro", nav_signal, f"{distancia_cm:.1f}")  # manda distancia cada frame hasta llegar
 
             if distancia_cm <= DISTANCIA_LLEGADA_CM:
-                print("Destino alcanzado")
+                print("[NAV] Destino alcanzado")
                 estado = nav_siguiente_estado
         # si no se ven los markers simplemente espera el siguiente frame
 
     elif estado == RUN:
-        print(f" Iniciando ejecución → rutina {rutina_elegida} | Modo: {modo_actual}")
+        print(f"[SYS] Iniciando ejecución → rutina {rutina_elegida} | Modo: {modo_actual}")
         ok = ejecutar_rutina_dobot(robot, rutina_elegida)
         if ok:
             if modo_actual == ACOMODAR:
                 # FIX: tras depositar, navegar brazo→usuario y avisar ML al master
-                bt_send('M', 'L')
+                bt_send("master", 'M', 'L')
                 nav_origen           = ARUCO_BRAZO
                 nav_destino          = ARUCO_USUARIO
                 nav_signal           = "KBU"
                 nav_siguiente_estado = IDLE
                 estado               = NAVEGAR
-                print("Paquete depositado → navegando a usuario")
+                print("[FSM] Paquete depositado → navegando a usuario")
             elif modo_actual == RECIBIR:
                 # FIX: tras recoger, avisar MR al master y volver a IDLE
-                bt_send('M', 'R')
+                bt_send("master", 'M', 'R')
                 estado = IDLE
-                print("Paquete recogido → IDLE")
+                print("[FSM] Paquete recogido → IDLE")
         else:
             estado = IDLE
 
