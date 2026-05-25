@@ -28,8 +28,8 @@ typedef struct
 #define BUTTON_PORT GPIOB
 #define BUTTON_PIN 0U /* Assigned to PTB0 (J10 - pin 2 on the board)*/
 #define ADC_BASE ADC0
-#define ADC_CH_LIGHT 9U
-#define ADC_CH_TEMPERATURE 12U
+#define ADC_CH_LIGHT 9U //PTB1
+#define ADC_CH_TEMPERATURE 12U //PTB2
 
 //example thresholds
 #define LIGHT_THRESHOLD 2048
@@ -65,7 +65,7 @@ int main(void) {
     	while(1);
     }
 
-    PRINTF("FreeRTOS KL25z - Tasks with sensors without queues or interruptions\r\n")
+    PRINTF("FreeRTOS KL25z - Tasks with sensors without queues or interruptions\r\n");
 
     // Definición de tareas
     xTaskCreate(vTaskBoton, "Light", configMINIMAL_STACK_SIZE + 100,
@@ -186,7 +186,7 @@ static void vTaskLedControl(void *pvParameters)
 				LED_RED_ON();
 			else
 				LED_RED_OFF();
-			if(button_value)
+			if(!button_value)
 				LED_GREEN_ON();
 			else
 				LED_GREEN_OFF();
