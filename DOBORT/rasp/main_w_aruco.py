@@ -47,8 +47,8 @@ for pin in PINES_FT.values():
     GPIO.setup(pin, GPIO.IN)
 
 # Bluetooth ----------------------------------------------------
-ser_master = serial.Serial('/dev/rfcomm0', 9600, timeout=0.1)  # Master (comm0)
-ser_carro  = serial.Serial('/dev/rfcomm1', 9600, timeout=0.1)  # Carro  (comm1)
+ser_master = serial.Serial('/dev/rfcomm1', 9600, timeout=0.1)  # Master (comm1)
+ser_carro  = serial.Serial('/dev/rfcomm0', 9600, timeout=0.1)  # Carro  (comm0)
 
 bt_queue_master = queue.Queue()
 bt_queue_carro  = queue.Queue()
@@ -61,10 +61,10 @@ master: MS (casilla ocupada), MN (casilla vacía), ME (sin espacio), ML (paquete
 def bt_send(destino, *args):
     msg = ''.join(map(str, args))
     if destino == "master":
-        ser_master.write((msg + '\n').encode())
+        ser_master.write((msg).encode())
         print(f"[BT TX → MASTER] '{msg}'")
     elif destino == "carro":
-        ser_carro.write((msg + '\n').encode())
+        ser_carro.write((msg).encode())
         print(f"[BT TX → CARRO] '{msg}'")
 
 #Señales que recibimos (sólo de Master): RS (start modo 1), R1-R6 (modo 2, posicion del slot)
@@ -257,12 +257,13 @@ while True:
                 # FIX: modo RECIBIR navega carro→brazo primero, igual que ACOMODAR
                 nav_origen           = ARUCO_CARRO
                 nav_destino          = ARUCO_BRAZO
-                nav_signal           = "KCB"
+                nav_signal           = "KUB"
                 nav_siguiente_estado = RUN
                 estado               = NAVEGAR
+                bt_send("carro", 'K', 'U', 'B')
                 print(f"[FSM] NAVEGAR → RUN rutina {numero}")
             else:
-                bt_send("master", 'M', 'N', '0')
+                bt_send("master", 'M', 'N')
                 print(f"casilla {numero} vacía, no se puede recibir ahí")
 
     # Máquina de estados ------------------------------------------------------
@@ -289,7 +290,7 @@ while True:
             print(f"[Slot libre → rutina {rutina_elegida}")
             nav_origen           = ARUCO_CARRO
             nav_destino          = ARUCO_BRAZO
-            nav_signal           = "KCB"
+            nav_signal           = "KUB"
             nav_siguiente_estado = RUN
             estado               = NAVEGAR
             bt_send("carro", nav_signal)  # ← start signal ANTES de entrar a NAVEGAR
