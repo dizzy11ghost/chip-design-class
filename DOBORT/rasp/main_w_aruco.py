@@ -336,8 +336,13 @@ while True:
             elif modo_actual == RECIBIR:
                 # FIX: tras recoger, avisar MR al master y volver a IDLE
                 bt_send("master", 'M', 'R')
-                estado = IDLE
-                print("[FSM] Paquete recogido → IDLE")
+                bt_send("carro", "KBU")
+                nav_origen           = ARUCO_BRAZO
+                nav_destino          = ARUCO_USUARIO
+                nav_signal           = "KBU"
+                nav_siguiente_estado = IDLE
+                estado               = NAVEGAR
+                print("[FSM] Paquete tomado → navegando a usuario")
         else:
             estado = IDLE
 
