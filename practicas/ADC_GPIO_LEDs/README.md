@@ -14,4 +14,12 @@ El sistema funciona bien en este caso, ya que es una aplicación pequeña, pero 
 Primero que nada, recordando que es una queue... Una queue es una estructura de datos LIFO (last in first out) en la que las tareas productoras pueden meter mensajes y otras tareas pueden esperar mensajes de dicha queue. 
 Usar este tipo de estructuras nos permite evitar que el CPU se active sin razón, eliminando en gran parte los riesgos de race condition. Aparte, al no tener variables globales compartidas, la comunicación se vuelve más segura. Además, cada tarea es independiente, por lo que el código se puede ver como que esta separado en diferentes modulos, y se vuelve más fácil debuggearlo, darle mantenimiento y escalarlo. 
 
+# Funcionamiento
+## Stage 1
+[![Ver video](https://img.youtube.com/vi/sU8BDFgu4Ko/hqdefault.jpg)](https://youtu.be/sU8BDFgu4Ko)
 
+## Stage 2
+[![Ver video](https://img.youtube.com/vi/mM7gCJHCJpw/hqdefault.jpg)](https://youtu.be/mM7gCJHCJpw)
+
+## Stage 3
+[![Ver video](https://img.youtube.com/vi/ruBCM2VVHU0/hqdefault.jpg)](https://youtu.be/ruBCM2VVHU0)
