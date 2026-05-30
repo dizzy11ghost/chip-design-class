@@ -8,12 +8,12 @@ module main_decoder(
 );
 
     parameter
-        Ltype = 7'b0000011,   //load
-        Itype = 7'b0010011,   //i
-        Stype = 7'b0100011,   //store
-        Rtype = 7'b0110011,   //R
-        Btype = 7'b1100011,   //branch
-        Jtype = 7'b1101111;   //J
+        Ltype = 7'b0000011, //load
+        Itype = 7'b0010011, //i
+        Stype = 7'b0100011, //store
+        Rtype = 7'b0110011, //R
+        Btype = 7'b1100011, //branch
+        Jtype = 7'b1101111; //J
 
     always @(*) begin
         casex (op)
