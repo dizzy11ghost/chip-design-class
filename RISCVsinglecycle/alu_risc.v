@@ -8,10 +8,10 @@ module alu_risc(
 );
     always @(*) begin
     case(ALUControl)
-        3'b000: ALUResult = A + B;// ADD
-		3'b001: ALUResult = A - B;// SUB
-		3'b010: ALUResult = A & B;// AND
-		3'b011: ALUResult = A | B;// OR
+        3'b000: ALUResult = A + B;//ADD
+		3'b001: ALUResult = A - B;//SUB
+		3'b010: ALUResult = A & B;//ANDD
+		3'b011: ALUResult = A | B;//ORR
         3'b101: ALUResult = A << B;
         default: ALUResult = 0;
     endcase
