@@ -21,7 +21,7 @@ Modos de movimiento disponibles:
 import time
 import json
 import os
-from pydobotplus import Dobot, MODE_PTP
+from pydobotplus import Dobot
 
 # ============================================================
 # CONFIGURACIÓN
@@ -34,9 +34,9 @@ ACELERACION     = 100    # mm/s²
 
 # Modos disponibles en pydobotplus
 MODOS = {
-    "1": ("MOVJ  — Joint (recomendado, no se atasca)", MODE_PTP.MOVJ_XYZ),
-    "2": ("MOVL  — Lineal (recto, puede atascarse)",   MODE_PTP.MOVL_XYZ),
-    "3": ("JUMP  — Sube/mueve/baja (pick & place)",    MODE_PTP.JUMP_XYZ),
+    "1": ("MOVJ  — Joint (recomendado, no se atasca)", 0x01),
+    "2": ("MOVL  — Lineal (recto, puede atascarse)",   0x02),
+    "3": ("JUMP  — Sube/mueve/baja (pick & place)",    0x00),
 }
 
 
