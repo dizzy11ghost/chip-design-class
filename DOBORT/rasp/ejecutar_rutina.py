@@ -1,277 +1,229 @@
 """
-ejecutar_rutina.py
-─────────────────────────────────────────────────────────────
-Ejecuta rutinas grabadas con teach_mode.py en el Dobot Magician.
-Usa pydobotplus. Al terminar, desconecta el robot.
+============================================================
+  Dobot Magician - Ejecutor de Rutinas
+  Hardware: Raspberry Pi 3 + Dobot Magician (UART)
+  Lib:      pip install pydobotplus
+============================================================
 
-Uso:
-  python ejecutar_rutina.py
-─────────────────────────────────────────────────────────────
+Modos de movimiento disponibles:
+  MOVJ  → Joint movement. Cada motor va de su ángulo actual
+          al ángulo destino independientemente. NO es lineal.
+          ✅ Recomendado: muy difícil que se atasque.
+
+  MOVL  → Lineal. El efector sigue una línea recta en el espacio.
+          ⚠️  Puede atascarse en singularidades aunque el punto
+          sea alcanzable manualmente.
+
+  JUMP  → Sube Z, se mueve en MOVJ, baja Z.
+          ✅ Ideal para pick & place (evita colisiones laterales).
 """
 
-import json
-import math
-import os
-import sys
 import time
+import json
+import os
+from pydobotplus import Dobot, MODE_PTP
 
-from pydobotplus import Dobot
+# ============================================================
+# CONFIGURACIÓN
+# ============================================================
+PUERTO_SERIAL   = "/dev/ttyS0"
+CARPETA_RUTINAS = "rutinas"
+TOTAL_RUTINAS   = 12
+VELOCIDAD       = 100    # mm/s
+ACELERACION     = 100    # mm/s²
 
-# ── Config ────────────────────────────────────────────────────────────────────
-PORT         = '/dev/ttyAMA0'
-RUTINAS_FILE = 'rutinas.json'
-
-# Punto seguro de tránsito — ajusta según tu setup
-SAFE_POINT = {"x": 200.0, "y": 0.0, "z": 80.0, "r": 0.0}
-
-# Workspace válido del Dobot Magician
-WS_RADIO_MIN = 130.0
-WS_RADIO_MAX = 320.0
-WS_Z_MIN     = -70.0
-WS_Z_MAX     = 150.0
-
-# Velocidad y aceleración (0-100). Baja estos valores si hay alarmas.
-VELOCIDAD    = 40
-ACELERACION  = 30
-
-ALARM_CLEAR_WAIT = 1.5  # s tras limpiar alarma
-
-SLOT_INFO = {
-    "1": "ROJO     – ft1",
-    "2": "AZUL     – ft2",
-    "3": "AMARILLO – ft3",
-    "4": "ROJO     – ft4",
-    "5": "AZUL     – ft5",
-    "6": "AMARILLO – ft6",
+# Modos disponibles en pydobotplus
+MODOS = {
+    "1": ("MOVJ  — Joint (recomendado, no se atasca)", MODE_PTP.MOVJ_XYZ),
+    "2": ("MOVL  — Lineal (recto, puede atascarse)",   MODE_PTP.MOVL_XYZ),
+    "3": ("JUMP  — Sube/mueve/baja (pick & place)",    MODE_PTP.JUMP_XYZ),
 }
 
-# ── JSON ──────────────────────────────────────────────────────────────────────
-def cargar_rutinas():
-    if not os.path.exists(RUTINAS_FILE):
-        print(f"[ERROR] No se encontró '{RUTINAS_FILE}'")
-        print("        Graba rutinas primero con teach_mode.py")
-        sys.exit(1)
+
+# ============================================================
+# UTILIDADES
+# ============================================================
+
+def conectar_dobot():
+    print(f"[INFO] Conectando al Dobot en {PUERTO_SERIAL}...")
     try:
-        with open(RUTINAS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"[ERROR] No se pudo leer '{RUTINAS_FILE}': {e}")
-        sys.exit(1)
-
-# ── Validación workspace ──────────────────────────────────────────────────────
-def punto_alcanzable(x, y, z):
-    radio = math.sqrt(x**2 + y**2)
-    if radio < WS_RADIO_MIN:
-        return False, f"radio {radio:.1f} mm < mínimo {WS_RADIO_MIN} mm (zona muerta)"
-    if radio > WS_RADIO_MAX:
-        return False, f"radio {radio:.1f} mm > máximo {WS_RADIO_MAX} mm"
-    if z < WS_Z_MIN:
-        return False, f"Z={z} mm < límite inferior {WS_Z_MIN} mm"
-    if z > WS_Z_MAX:
-        return False, f"Z={z} mm > límite superior {WS_Z_MAX} mm"
-    return True, ""
-
-# ── Succión ───────────────────────────────────────────────────────────────────
-def set_suction(robot, enable: bool):
-    try:
-        robot.suction_cup(enable)
-    except AttributeError:
-        try:
-            robot.suck(enable)
-        except Exception as e:
-            print(f"  [WARN] Succión: {e}")
-
-# ── Limpiar alarma ────────────────────────────────────────────────────────────
-def limpiar_alarma(robot):
-    try:
-        robot.clear_alarms()
-        time.sleep(ALARM_CLEAR_WAIT)
-        print("  [ALARMA] Limpiada con clear_alarms() ✓")
-        return True
-    except AttributeError:
-        pass
-    try:
-        robot._set_cmd(20, b"")
-        time.sleep(ALARM_CLEAR_WAIT)
-        print("  [ALARMA] Limpiada con comando 20 ✓")
-        return True
-    except Exception as e:
-        print(f"  [ALARMA] No se pudo limpiar: {e}")
-        return False
-
-# ── Movimiento atómico a un punto ─────────────────────────────────────────────
-def _move(robot, x, y, z, r):
-    """Llamada directa a move_to. Lanza excepción si falla."""
-    robot.move_to(
-        x, y, z, r,
-        velocity=VELOCIDAD,
-        acceleration=ACELERACION,
-        wait=True,
-    )
-
-def ir_a_safe(robot):
-    sp = SAFE_POINT
-    print(f"  ↳ Yendo a SAFE_POINT ({sp['x']}, {sp['y']}, {sp['z']})…")
-    try:
-        _move(robot, sp["x"], sp["y"], sp["z"], sp["r"])
-        return True
-    except Exception as e:
-        print(f"  [ERROR] SAFE_POINT falló: {e}")
-        return False
-
-def mover_punto(robot, punto, idx):
-    """
-    Mueve al punto dado.
-    Flujo:
-      1. Valida workspace.
-      2. move_to() directo.
-      3. Si falla → limpia alarma → reintenta vía SAFE_POINT.
-    Devuelve (llegó: bool, robot).
-    """
-    x, y, z, r = punto["x"], punto["y"], punto["z"], punto["r"]
-    print(f"\n  → Punto {idx}: X={x:7.2f}  Y={y:7.2f}  Z={z:7.2f}  R={r:6.2f}")
-
-    # ── 1. Validación ─────────────────────────────────────────
-    alcanzable, razon = punto_alcanzable(x, y, z)
-    if not alcanzable:
-        print(f"  [WARN] Fuera de workspace: {razon}")
-        print(f"         Intentando vía SAFE_POINT…")
-        if not ir_a_safe(robot):
-            print(f"  ✗ Punto {idx} omitido (SAFE_POINT inalcanzable)")
-            return False, robot
-        # intentar destino después del safe
-        try:
-            _move(robot, x, y, z, r)
-            print(f"     ✓ Llegó al punto {idx} (vía SAFE)")
-            return True, robot
-        except Exception as e:
-            print(f"  ✗ Punto {idx} omitido incluso vía SAFE: {e}")
-            return False, robot
-
-    # ── 2. Movimiento directo ─────────────────────────────────
-    try:
-        _move(robot, x, y, z, r)
-        print(f"     ✓ Llegó al punto {idx}")
-        return True, robot
-
-    except Exception as e:
-        print(f"  [ERROR] Fallo movimiento: {e}")
-
-    # ── 3. Recuperación ───────────────────────────────────────
-    print(f"  [RECOVER] Intentando limpiar alarma y reintentar…")
-    if limpiar_alarma(robot):
-        if not ir_a_safe(robot):
-            print(f"  ✗ Punto {idx} omitido (no se pudo recuperar)")
-            return False, robot
-        try:
-            _move(robot, x, y, z, r)
-            print(f"     ✓ Llegó al punto {idx} (recuperado)")
-            return True, robot
-        except Exception as e2:
-            print(f"  ✗ Reintento fallido: {e2}")
-
-    print(f"  ✗ Punto {idx} omitido")
-    return False, robot
-
-# ── Ejecución de rutina ───────────────────────────────────────────────────────
-def ejecutar_rutina(robot, puntos, num):
-    total   = len(puntos)
-    errores = 0
-
-    print(f"\n{'─'*55}")
-    print(f"  EJECUTANDO RUTINA {num}  ({total} puntos)")
-    print(f"{'─'*55}")
-
-    for idx, punto in enumerate(puntos):
-
-        # Aplicar succión ANTES del movimiento
-        set_suction(robot, punto.get("suction", False))
-
-        llegó, robot = mover_punto(robot, punto, idx)
-
-        if not llegó:
-            errores += 1
-
-    # Apagar succión al terminar
-    set_suction(robot, False)
-
-    print(f"\n{'─'*55}")
-    if errores == 0:
-        print(f"  ✓ Rutina {num} completada sin errores")
-    else:
-        print(f"  ⚠ Rutina {num} completada — {errores}/{total} punto(s) omitido(s)")
-    print(f"{'─'*55}")
-
-# ── Menú ──────────────────────────────────────────────────────────────────────
-def menu(rutinas):
-    print("\n+================================================+")
-    print("|     DOBOT EJECUTAR RUTINAS  (pydobotplus)     |")
-    print("+================================================+")
-
-    if not rutinas:
-        print("  No hay rutinas grabadas.")
-        print("  Usa teach_mode.py para grabarlas primero.")
-        sys.exit(0)
-
-    for num, desc in SLOT_INFO.items():
-        if num in rutinas:
-            pts = len(rutinas[num])
-            print(f"  [{num}]  {desc:<22}  ({pts} puntos)")
-        else:
-            print(f"  [{num}]  {desc:<22}  [sin grabar]")
-
-    print("\n  [0] Salir\n")
-
-    op = input("Opción: ").strip()
-
-    if op == '0':
-        print("Saliendo…")
-        sys.exit(0)
-
-    if op not in rutinas:
-        if op in SLOT_INFO:
-            print(f"\n[INFO] La rutina {op} no está grabada todavía.")
-        else:
-            print("\n[INFO] Opción no válida.")
-        return None
-
-    return op
-
-# ── Main ──────────────────────────────────────────────────────────────────────
-def main():
-    rutinas = cargar_rutinas()
-
-    op = menu(rutinas)
-    if op is None:
-        return
-
-    puntos = rutinas[op]
-
-    print(f"\n[RUN] Conectando a Dobot en {PORT}…")
-    try:
-        robot = Dobot(port=PORT, verbose=False)
+        robot = Dobot(port=PUERTO_SERIAL)
+        print("[OK] ¡Dobot conectado!\n")
+        return robot
     except Exception as e:
         print(f"[ERROR] No se pudo conectar: {e}")
-        sys.exit(1)
+        raise
 
-    print("[RUN] Conectado ✓\n")
+
+def cargar_rutina(numero):
+    """Carga una rutina desde su .json. Retorna None si no existe o está vacía."""
+    ruta = os.path.join(CARPETA_RUTINAS, f"rutina_{numero:02d}.json")
+    if not os.path.exists(ruta):
+        return None, None
+    with open(ruta, "r") as f:
+        data = json.load(f)
+    puntos = data.get("rutina", [])
+    nombre = data.get("nombre", f"Rutina {numero:02d}")
+    if not puntos:
+        return nombre, None
+    return nombre, puntos
+
+
+# ============================================================
+# MENÚ PRINCIPAL
+# ============================================================
+
+def imprimir_menu_principal():
+    os.system("clear")
+    print("=" * 55)
+    print("   DOBOT MAGICIAN - EJECUTOR DE RUTINAS")
+    print("=" * 55)
+    print(f"  {'#':<5} {'Nombre':<25} {'Puntos':>7}")
+    print("  " + "─" * 40)
+
+    for i in range(1, TOTAL_RUTINAS + 1):
+        nombre, puntos = cargar_rutina(i)
+        if nombre and puntos:
+            print(f"  {i:<5} {nombre:<25} {len(puntos):>7}")
+        elif nombre:
+            print(f"  {i:<5} {nombre:<25} {'vacía':>7}")
+        else:
+            print(f"  {i:<5} {'(sin guardar)':<25} {'─':>7}")
+
+    print("  " + "─" * 40)
+    print("  [0] Salir")
+    print("=" * 55)
+
+
+def elegir_modo():
+    """Muestra las opciones de modo de movimiento y retorna el elegido."""
+    print("\n  Modo de movimiento:")
+    for key, (desc, _) in MODOS.items():
+        print(f"  [{key}] {desc}")
+    print()
+
+    while True:
+        entrada = input("  Elige modo (1/2/3) [ENTER = MOVJ por defecto]: ").strip()
+        if entrada == "" or entrada == "1":
+            return MODOS["1"][1], "MOVJ"
+        elif entrada in MODOS:
+            return MODOS[entrada][1], entrada
+        else:
+            print("  [!] Opción no válida.")
+
+
+# ============================================================
+# EJECUTOR DE RUTINA
+# ============================================================
+
+def ejecutar_rutina(robot, numero):
+    nombre, puntos = cargar_rutina(numero)
+
+    if not puntos:
+        print(f"\n  [!] La rutina {numero:02d} está vacía o no existe.")
+        time.sleep(1.5)
+        return
+
+    os.system("clear")
+    print("=" * 55)
+    print(f"   EJECUTANDO → Rutina {numero:02d}: {nombre}")
+    print("=" * 55)
+    print(f"  Total de puntos: {len(puntos)}")
+
+    # Mostrar resumen de la rutina
+    print(f"\n  {'#':<5} {'X':>8} {'Y':>8} {'Z':>8} {'R':>8} {'Succión':>8}")
+    print("  " + "─" * 48)
+    for i, p in enumerate(puntos):
+        suc = "SÍ" if p.get("succion") else "NO"
+        print(f"  {i+1:<5} {p['x']:>8} {p['y']:>8} {p['z']:>8} {p['r']:>8} {suc:>8}")
+    print()
+
+    # Elegir modo de movimiento
+    modo, modo_nombre = elegir_modo()
+
+    confirmar = input(f"  ¿Ejecutar rutina con modo {modo_nombre}? (s/n): ").strip().lower()
+    if confirmar != "s":
+        print("  [INFO] Ejecución cancelada.")
+        time.sleep(1)
+        return
+
+    # Configurar velocidad
+    robot.speed(velocity=VELOCIDAD, acceleration=ACELERACION)
+
+    print(f"\n[INFO] Iniciando rutina '{nombre}' en modo {modo_nombre}...\n")
 
     try:
-        ejecutar_rutina(robot, puntos, op)
+        for i, punto in enumerate(puntos):
+            x   = punto["x"]
+            y   = punto["y"]
+            z   = punto["z"]
+            r   = punto.get("r", 0)
+            suc = punto.get("succion", False)
+
+            print(f"  [{i+1}/{len(puntos)}] → X:{x}  Y:{y}  Z:{z}  R:{r}  Succión:{'SÍ' if suc else 'NO'}")
+
+            # Mover al punto con el modo elegido
+            robot.move_to(x=x, y=y, z=z, r=r, wait=True, mode=modo)
+
+            # Aplicar succión si corresponde
+            robot.suck(suc)
+
+            # Pequeña pausa entre puntos para estabilizar
+            time.sleep(0.3)
+
+        print(f"\n[OK] Rutina '{nombre}' completada ({len(puntos)} puntos ejecutados).")
+
     except KeyboardInterrupt:
-        print("\n\n[RUN] Interrumpido por usuario")
-        set_suction(robot, False)
+        print("\n[INFO] Ejecución interrumpida por el usuario.")
+        robot.suck(False)   # Apagar succión por seguridad
+
+    except Exception as e:
+        print(f"\n[ERROR] Fallo durante la ejecución: {e}")
+        robot.suck(False)
+
+    input("\n  Presiona ENTER para volver al menú...")
+
+
+# ============================================================
+# MAIN
+# ============================================================
+
+def main():
+    robot = None
+    try:
+        robot = conectar_dobot()
+
+        alarmas = robot.get_alarms()
+        if alarmas:
+            print(f"[ALERTA] Alarmas activas: {alarmas}")
+            robot.clear_alarms()
+            print("[INFO] Alarmas limpiadas.\n")
+
+        while True:
+            imprimir_menu_principal()
+            entrada = input("\n  Elige una rutina (1-12) o 0 para salir: ").strip()
+
+            if entrada == "0":
+                print("\n[INFO] Saliendo.\n")
+                break
+            elif entrada.isdigit() and 1 <= int(entrada) <= TOTAL_RUTINAS:
+                ejecutar_rutina(robot, int(entrada))
+            else:
+                print("  [!] Opción no válida.")
+                time.sleep(1)
+
+    except KeyboardInterrupt:
+        print("\n[INFO] Interrumpido por el usuario.")
+
+    except Exception as e:
+        print(f"[ERROR] {e}")
+
     finally:
-        try:
+        if robot:
+            robot.suck(False)
             robot.close()
-            print("[RUN] Robot desconectado")
-        except Exception:
-            pass
+            print("[OK] Conexión cerrada.")
 
 
-if __name__ == '__main__':
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\nSaliendo…")
-        sys.exit(0)
+if __name__ == "__main__":
+    main()
