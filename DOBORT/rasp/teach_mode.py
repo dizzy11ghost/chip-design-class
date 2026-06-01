@@ -1,169 +1,195 @@
 """
 ============================================================
-  Dobot Magician - Control via UART con pydobotplus
-  Hardware: Raspberry Pi 3 + Dobot Magician (puerto serial)
-  IDE:      Geany
+  Dobot Magician - Grabador de Rutinas
+  Hardware: Raspberry Pi 3 + Dobot Magician (UART)
   Lib:      pip install pydobotplus
 ============================================================
 
-ANTES DE CORRER ESTE SCRIPT:
-------------------------------
-1. Habilitar UART en la RPi 3:
-   - Abre terminal y corre: sudo raspi-config
-   - Ve a: Interface Options > Serial Port
-   - "Would you like a login shell...?" → NO
-   - "Would you like the serial port hardware...?" → YES
-   - Reinicia la RPi: sudo reboot
-
-2. Agregar tu usuario al grupo dialout (para acceder al puerto):
-   sudo usermod -a -G dialout $USER
-   (cerrar sesión y volver a entrar para que aplique)
-
-3. Instalar la librería:
-   pip install pydobotplus
-
-4. Identificar el puerto correcto:
-   ls /dev/tty*
-   Normalmente en RPi 3 con UART físico es:
-     /dev/ttyS0     ← UART mini (pines GPIO 14/15)
-     /dev/ttyAMA0   ← UART completo (puede estar ocupado por Bluetooth)
-   Si usas adaptador USB-Serial:
-     /dev/ttyUSB0
-
-PINES UART en Raspberry Pi 3 (para conectar al Dobot):
-   RPi GPIO 14 (TXD) → Dobot RX
-   RPi GPIO 15 (RXD) → Dobot TX
-   RPi GND           → Dobot GND
-   (NO conectes 5V/3.3V de la RPi al Dobot, el Dobot tiene su propia alimentación)
+Controles:
+  ENTER  → guarda la posición actual
+  s      → toggle succión (ON/OFF)
+  d      → descarta el último punto guardado
+  f      → finalizar y guardar rutina en .json
+  q      → salir sin guardar
 """
 
 import time
+import json
+import os
 from pydobotplus import Dobot
 
 # ============================================================
-# CONFIGURACIÓN - Cambia esto según tu setup
+# CONFIGURACIÓN
 # ============================================================
-PUERTO_SERIAL = "/dev/ttyS0"   # Cambia a /dev/ttyAMA0 o /dev/ttyUSB0 si es necesario
-VELOCIDAD     = 100            # mm/s - velocidad de movimiento
-ACELERACION   = 100            # mm/s² - aceleración
+PUERTO_SERIAL   = "/dev/ttyS0"   # Cambia si es necesario
+CARPETA_RUTINAS = "rutinas"      # Carpeta donde se guardan los .json
 
 
-def inicializar_dobot(puerto):
-    """Inicializa la conexión con el Dobot Magician."""
-    print(f"[INFO] Conectando al Dobot en {puerto}...")
+# ============================================================
+# UTILIDADES
+# ============================================================
+
+def conectar_dobot():
+    print(f"[INFO] Conectando al Dobot en {PUERTO_SERIAL}...")
     try:
-        robot = Dobot(port=puerto)
-        print("[OK] ¡Dobot conectado exitosamente!")
+        robot = Dobot(port=PUERTO_SERIAL)
+        print("[OK] ¡Dobot conectado!\n")
         return robot
     except Exception as e:
-        print(f"[ERROR] No se pudo conectar al Dobot: {e}")
-        print("[TIP]  Verifica el puerto serial y que el Dobot esté encendido.")
+        print(f"[ERROR] No se pudo conectar: {e}")
         raise
 
 
-def mostrar_posicion(robot):
-    """Imprime la posición y ángulos actuales del Dobot."""
+def obtener_posicion(robot):
+    """Lee la posición actual del Dobot y la retorna como diccionario."""
     pose = robot.get_pose()
-    print("\n--- Posición actual ---")
-    print(f"  X: {pose.position.x:.2f} mm")
-    print(f"  Y: {pose.position.y:.2f} mm")
-    print(f"  Z: {pose.position.z:.2f} mm")
-    print(f"  R: {pose.position.r:.2f}°")
-    print(f"  Joints: J1={pose.joints.j1:.2f}° | J2={pose.joints.j2:.2f}° | J3={pose.joints.j3:.2f}° | J4={pose.joints.j4:.2f}°")
-    print("-----------------------\n")
-    return pose
+    return {
+        "x": round(pose.position.x, 2),
+        "y": round(pose.position.y, 2),
+        "z": round(pose.position.z, 2),
+        "r": round(pose.position.r, 2),
+    }
 
 
-def demo_movimientos(robot):
-    """
-    Secuencia de movimientos de demostración.
-    Ajusta las coordenadas X/Y/Z según el espacio de trabajo de tu Dobot.
+def guardar_json(puntos, nombre_archivo):
+    """Guarda la lista de puntos en un archivo .json."""
+    os.makedirs(CARPETA_RUTINAS, exist_ok=True)
+    if not nombre_archivo.endswith(".json"):
+        nombre_archivo += ".json"
+    ruta = os.path.join(CARPETA_RUTINAS, nombre_archivo)
+    with open(ruta, "w") as f:
+        json.dump({"rutina": puntos}, f, indent=4)
+    print(f"\n[OK] Rutina guardada en: {ruta}  ({len(puntos)} puntos)")
 
-    Espacio de trabajo típico del Dobot Magician:
-      X: 100 mm a 320 mm (frente al robot)
-      Y: -260 mm a 260 mm (lateral)
-      Z: -60 mm a 150 mm (altura)
-    """
 
-    print("[INFO] Configurando velocidad y aceleración...")
-    robot.speed(velocity=VELOCIDAD, acceleration=ACELERACION)
+def imprimir_estado(puntos, succion_activa):
+    """Imprime el encabezado con controles y lista de puntos actuales."""
+    os.system("clear")
+    print("=" * 55)
+    print("   GRABADOR DE RUTINAS - Dobot Magician")
+    print("=" * 55)
+    print("  Controles:")
+    print("  ENTER  → guarda la posición actual")
+    print("  s      → toggle succión")
+    print("  d      → descarta último punto")
+    print("  f      → finalizar y guardar")
+    print("  q      → salir sin guardar")
+    print("─" * 55)
 
-    # ----- POSICIÓN HOME (segura para comenzar) -----
-    print("[MOVE] Yendo a posición HOME...")
-    robot.move_to(x=220, y=0, z=100, r=0, wait=True)
-    mostrar_posicion(robot)
-    time.sleep(1)
+    succion_str = "🟢 ON" if succion_activa else "🔴 OFF"
+    print(f"  Succión: {succion_str}    Puntos guardados: {len(puntos)}")
+    print("─" * 55)
 
-    # ----- MOVIMIENTO 1: Ir a un punto adelante -----
-    print("[MOVE] Movimiento 1 → Punto A (adelante-izquierda, bajo)...")
-    robot.move_to(x=200, y=80, z=50, r=0, wait=True)
-    mostrar_posicion(robot)
-    time.sleep(1)
+    if puntos:
+        print(f"  {'#':<5} {'X':>8} {'Y':>8} {'Z':>8} {'R':>8} {'Succión':>8}")
+        print("  " + "-" * 48)
+        for i, p in enumerate(puntos):
+            marca = "← último" if i == len(puntos) - 1 else ""
+            suc = "SÍ" if p["succion"] else "NO"
+            print(f"  {i+1:<5} {p['x']:>8} {p['y']:>8} {p['z']:>8} {p['r']:>8} {suc:>8}  {marca}")
+    else:
+        print("  (ningún punto guardado todavía)")
 
-    # ----- MOVIMIENTO 2: Ir a otro punto -----
-    print("[MOVE] Movimiento 2 → Punto B (adelante-derecha, bajo)...")
-    robot.move_to(x=200, y=-80, z=50, r=0, wait=True)
-    mostrar_posicion(robot)
-    time.sleep(1)
+    print("─" * 55)
 
-    # ----- MOVIMIENTO 3: Subir -----
-    print("[MOVE] Movimiento 3 → Subiendo Z...")
-    robot.move_to(x=200, y=0, z=120, r=0, wait=True)
-    mostrar_posicion(robot)
-    time.sleep(1)
 
-    # ----- MOVIMIENTO RELATIVO: Desplazarse +30mm en X -----
-    print("[MOVE] Movimiento relativo → +30mm en X...")
-    robot.move_rel(x=30, y=0, z=0, r=0, wait=True)
-    mostrar_posicion(robot)
-    time.sleep(1)
+# ============================================================
+# LOOP PRINCIPAL
+# ============================================================
 
-    # ----- DEMO SUCCIÓN (descomenta si tienes ventosa) -----
-    # print("[TOOL] Activando succión...")
-    # robot.suck(True)
-    # time.sleep(2)
-    # robot.move_to(x=220, y=0, z=80, r=0, wait=True)
-    # time.sleep(1)
-    # print("[TOOL] Desactivando succión...")
-    # robot.suck(False)
+def grabar(robot):
+    puntos        = []
+    succion_activa = False
 
-    # ----- REGRESAR A HOME -----
-    print("[MOVE] Regresando a HOME...")
-    robot.move_to(x=220, y=0, z=100, r=0, wait=True)
-    print("[OK] Secuencia completada.\n")
+    imprimir_estado(puntos, succion_activa)
 
+    while True:
+        entrada = input("  > ").strip().lower()
+
+        # ── ENTER → guardar posición ─────────────────────────
+        if entrada == "":
+            try:
+                pos = obtener_posicion(robot)
+                pos["succion"] = succion_activa
+                puntos.append(pos)
+                suc = "SÍ" if succion_activa else "NO"
+                print(f"  [OK] Punto {len(puntos)} guardado → X:{pos['x']}  Y:{pos['y']}  Z:{pos['z']}  Succión:{suc}")
+            except Exception as e:
+                print(f"  [ERROR] No se pudo leer posición: {e}")
+            time.sleep(0.5)
+            imprimir_estado(puntos, succion_activa)
+
+        # ── s → toggle succión ───────────────────────────────
+        elif entrada == "s":
+            succion_activa = not succion_activa
+            try:
+                robot.suck(succion_activa)
+            except Exception as e:
+                print(f"  [ERROR] No se pudo cambiar succión: {e}")
+            imprimir_estado(puntos, succion_activa)
+
+        # ── d → descartar último punto ───────────────────────
+        elif entrada == "d":
+            if puntos:
+                eliminado = puntos.pop()
+                print(f"  [OK] Último punto eliminado → X:{eliminado['x']}  Y:{eliminado['y']}  Z:{eliminado['z']}")
+                time.sleep(0.5)
+                imprimir_estado(puntos, succion_activa)
+            else:
+                print("  [!] No hay puntos para descartar.")
+
+        # ── f → finalizar y guardar ──────────────────────────
+        elif entrada == "f":
+            if not puntos:
+                print("  [!] No hay puntos guardados. Agrega al menos uno.")
+                continue
+            imprimir_estado(puntos, succion_activa)
+            nombre = input("  Nombre del archivo (sin .json): ").strip()
+            if nombre:
+                guardar_json(puntos, nombre)
+                break
+            else:
+                print("  [!] Nombre inválido, no se guardó.")
+
+        # ── q → salir sin guardar ────────────────────────────
+        elif entrada == "q":
+            if puntos:
+                confirmar = input(f"  Tienes {len(puntos)} punto(s) sin guardar. ¿Salir? (s/n): ").strip().lower()
+                if confirmar != "s":
+                    imprimir_estado(puntos, succion_activa)
+                    continue
+            print("\n[INFO] Saliendo sin guardar.")
+            break
+
+        else:
+            print("  [!] Tecla no reconocida. Usa ENTER, s, d, f o q.")
+
+
+# ============================================================
+# MAIN
+# ============================================================
 
 def main():
     robot = None
     try:
-        # Inicializar conexión
-        robot = inicializar_dobot(PUERTO_SERIAL)
+        robot = conectar_dobot()
 
-        # Verificar alarmas al inicio
         alarmas = robot.get_alarms()
         if alarmas:
             print(f"[ALERTA] Alarmas activas: {alarmas}")
-            print("[INFO]  Limpiando alarmas...")
             robot.clear_alarms()
-        else:
-            print("[OK] Sin alarmas activas.")
+            print("[INFO] Alarmas limpiadas.\n")
 
-        # Mostrar posición inicial
-        print("\n[INFO] Posición inicial:")
-        mostrar_posicion(robot)
-
-        # Ejecutar demo de movimientos
-        demo_movimientos(robot)
+        grabar(robot)
 
     except KeyboardInterrupt:
-        print("\n[INFO] Script interrumpido por el usuario.")
+        print("\n[INFO] Interrumpido por el usuario.")
 
     except Exception as e:
         print(f"[ERROR] {e}")
 
     finally:
         if robot:
-            print("[INFO] Cerrando conexión con el Dobot...")
             robot.close()
             print("[OK] Conexión cerrada.")
 
