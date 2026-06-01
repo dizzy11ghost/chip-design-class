@@ -1,185 +1,277 @@
+"""
+ejecutar_rutina.py
+─────────────────────────────────────────────────────────────
+Ejecuta rutinas grabadas con teach_mode.py en el Dobot Magician.
+Usa pydobotplus. Al terminar, desconecta el robot.
+
+Uso:
+  python ejecutar_rutina.py
+─────────────────────────────────────────────────────────────
+"""
+
+import json
 import math
+import os
+import sys
 import time
- 
-# ── Punto seguro "neutro" ──────────────────────────────────────
-# Posición central elevada con buen radio de maniobra.
-# AJUSTA según tu setup físico:
+
+from pydobotplus import Dobot
+
+# ── Config ────────────────────────────────────────────────────────────────────
+PORT         = '/dev/ttyAMA0'
+RUTINAS_FILE = 'rutinas.json'
+
+# Punto seguro de tránsito — ajusta según tu setup
 SAFE_POINT = {"x": 200.0, "y": 0.0, "z": 80.0, "r": 0.0}
- 
-# Workspace válido aproximado del Dobot Magician
-WS_RADIO_MIN  = 130.0   # mm desde la base (eje Z)
-WS_RADIO_MAX  = 320.0   # mm desde la base
-WS_Z_MIN      = -70.0   # mm (relativo al origen de la base)
-WS_Z_MAX      = 150.0   # mm
- 
-# Tiempo de espera tras limpiar alarma
-ALARM_CLEAR_WAIT = 1.5  # s
- 
- 
-# ── A. Validación cinemática previa ───────────────────────────
- 
-def punto_alcanzable(x, y, z, r=None):
-    """
-    Verifica si (x, y, z) está dentro del workspace válido
-    del Dobot Magician antes de intentar moverse.
- 
-    Devuelve (True, "") o (False, "razón").
-    """
-    radio = math.sqrt(x**2 + y**2)
- 
-    if radio < WS_RADIO_MIN:
-        return False, f"Radio {radio:.1f}mm < mínimo {WS_RADIO_MIN}mm (zona muerta central)"
- 
-    if radio > WS_RADIO_MAX:
-        return False, f"Radio {radio:.1f}mm > máximo {WS_RADIO_MAX}mm (fuera de alcance)"
- 
-    if z < WS_Z_MIN:
-        return False, f"Z={z}mm por debajo del límite {WS_Z_MIN}mm"
- 
-    if z > WS_Z_MAX:
-        return False, f"Z={z}mm por encima del límite {WS_Z_MAX}mm"
- 
-    return True, ""
- 
- 
-# ── B. Waypoint seguro intermedio ─────────────────────────────
- 
-def mover_via_safe(robot, tx, ty, tz, tr, idx):
-    """
-    Mueve el brazo pasando por SAFE_POINT antes del destino.
-    Útil cuando el camino directo cruza una singularidad o zona muerta.
- 
-    Devuelve (llegó: bool, robot).
-    """
-    sp = SAFE_POINT
-    print(f"  ↳ Punto {idx}: vía SAFE ({sp['x']}, {sp['y']}, {sp['z']})")
- 
-    # Primero al punto seguro
-    llegó, robot = mover_segmento(
-        robot, sp["x"], sp["y"], sp["z"], sp["r"],
-        etiqueta=f"  → Punto {idx} [SAFE]:"
-    )
-    if not llegó:
-        return False, robot
- 
-    # Luego al destino real
-    llegó, robot = mover_segmento(
-        robot, tx, ty, tz, tr,
-        etiqueta=f"  → Punto {idx} [destino]:"
-    )
-    return llegó, robot
- 
- 
-# ── C. Recuperación de alarma (luz roja) ──────────────────────
- 
-def limpiar_alarma(robot):
-    """
-    Intenta limpiar la alarma activa del Dobot (la que prende
-    la luz roja cuando golpea un límite cinemático).
- 
-    Devuelve True si logró limpiarla.
-    """
+
+# Workspace válido del Dobot Magician
+WS_RADIO_MIN = 130.0
+WS_RADIO_MAX = 320.0
+WS_Z_MIN     = -70.0
+WS_Z_MAX     = 150.0
+
+# Velocidad y aceleración (0-100). Baja estos valores si hay alarmas.
+VELOCIDAD    = 40
+ACELERACION  = 30
+
+ALARM_CLEAR_WAIT = 1.5  # s tras limpiar alarma
+
+SLOT_INFO = {
+    "1": "ROJO     – ft1",
+    "2": "AZUL     – ft2",
+    "3": "AMARILLO – ft3",
+    "4": "ROJO     – ft4",
+    "5": "AZUL     – ft5",
+    "6": "AMARILLO – ft6",
+}
+
+# ── JSON ──────────────────────────────────────────────────────────────────────
+def cargar_rutinas():
+    if not os.path.exists(RUTINAS_FILE):
+        print(f"[ERROR] No se encontró '{RUTINAS_FILE}'")
+        print("        Graba rutinas primero con teach_mode.py")
+        sys.exit(1)
     try:
-        # pydobot expone clear_alarms() en versiones recientes
+        with open(RUTINAS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"[ERROR] No se pudo leer '{RUTINAS_FILE}': {e}")
+        sys.exit(1)
+
+# ── Validación workspace ──────────────────────────────────────────────────────
+def punto_alcanzable(x, y, z):
+    radio = math.sqrt(x**2 + y**2)
+    if radio < WS_RADIO_MIN:
+        return False, f"radio {radio:.1f} mm < mínimo {WS_RADIO_MIN} mm (zona muerta)"
+    if radio > WS_RADIO_MAX:
+        return False, f"radio {radio:.1f} mm > máximo {WS_RADIO_MAX} mm"
+    if z < WS_Z_MIN:
+        return False, f"Z={z} mm < límite inferior {WS_Z_MIN} mm"
+    if z > WS_Z_MAX:
+        return False, f"Z={z} mm > límite superior {WS_Z_MAX} mm"
+    return True, ""
+
+# ── Succión ───────────────────────────────────────────────────────────────────
+def set_suction(robot, enable: bool):
+    try:
+        robot.suction_cup(enable)
+    except AttributeError:
+        try:
+            robot.suck(enable)
+        except Exception as e:
+            print(f"  [WARN] Succión: {e}")
+
+# ── Limpiar alarma ────────────────────────────────────────────────────────────
+def limpiar_alarma(robot):
+    try:
         robot.clear_alarms()
         time.sleep(ALARM_CLEAR_WAIT)
-        print("  [ALARMA] Alarma limpiada con clear_alarms()")
+        print("  [ALARMA] Limpiada con clear_alarms() ✓")
         return True
     except AttributeError:
         pass
- 
-    # Fallback: algunos builds usan _set_cmd directamente
     try:
-        # Comando Dobot 20 = ClearAllAlarmsState
         robot._set_cmd(20, b"")
         time.sleep(ALARM_CLEAR_WAIT)
-        print("  [ALARMA] Alarma limpiada con comando directo 20")
+        print("  [ALARMA] Limpiada con comando 20 ✓")
         return True
     except Exception as e:
         print(f"  [ALARMA] No se pudo limpiar: {e}")
         return False
- 
- 
-# ── Reemplazo de mover_con_interpolacion ──────────────────────
-# Sustituye la función homónima en ejecutar_rutina.py
- 
-def mover_con_interpolacion(robot, ax, ay, az, ar,
-                             tx, ty, tz, tr, idx):
+
+# ── Movimiento atómico a un punto ─────────────────────────────────────────────
+def _move(robot, x, y, z, r):
+    """Llamada directa a move_to. Lanza excepción si falla."""
+    robot.move_to(
+        x, y, z, r,
+        velocity=VELOCIDAD,
+        acceleration=ACELERACION,
+        wait=True,
+    )
+
+def ir_a_safe(robot):
+    sp = SAFE_POINT
+    print(f"  ↳ Yendo a SAFE_POINT ({sp['x']}, {sp['y']}, {sp['z']})…")
+    try:
+        _move(robot, sp["x"], sp["y"], sp["z"], sp["r"])
+        return True
+    except Exception as e:
+        print(f"  [ERROR] SAFE_POINT falló: {e}")
+        return False
+
+def mover_punto(robot, punto, idx):
     """
-    v2: incluye validación previa y recuperación de alarma.
- 
+    Mueve al punto dado.
     Flujo:
-      1. Valida que el destino esté en workspace válido.
-         Si no → registra y usa waypoint seguro de todas formas
-                 (el waypoint sí debe ser alcanzable).
-      2. Calcula segmentos de interpolación.
-      3. Ejecuta cada segmento con mover_segmento().
-      4. Si mover_segmento falla con luz roja (error de comm
-         o timeout), intenta limpiar la alarma y reintentar
-         vía SAFE_POINT una sola vez.
- 
+      1. Valida workspace.
+      2. move_to() directo.
+      3. Si falla → limpia alarma → reintenta vía SAFE_POINT.
     Devuelve (llegó: bool, robot).
     """
- 
-    # ── 1. Validación previa ──────────────────────────────────
-    alcanzable, razon = punto_alcanzable(tx, ty, tz, tr)
+    x, y, z, r = punto["x"], punto["y"], punto["z"], punto["r"]
+    print(f"\n  → Punto {idx}: X={x:7.2f}  Y={y:7.2f}  Z={z:7.2f}  R={r:6.2f}")
+
+    # ── 1. Validación ─────────────────────────────────────────
+    alcanzable, razon = punto_alcanzable(x, y, z)
     if not alcanzable:
-        print(f"\n  [WARN] Punto {idx} fuera de workspace: {razon}")
-        print(f"         Intentando ruta alternativa vía SAFE_POINT...")
-        llegó, robot = mover_via_safe(robot, tx, ty, tz, tr, idx)
-        if llegó:
+        print(f"  [WARN] Fuera de workspace: {razon}")
+        print(f"         Intentando vía SAFE_POINT…")
+        if not ir_a_safe(robot):
+            print(f"  ✗ Punto {idx} omitido (SAFE_POINT inalcanzable)")
+            return False, robot
+        # intentar destino después del safe
+        try:
+            _move(robot, x, y, z, r)
             print(f"     ✓ Llegó al punto {idx} (vía SAFE)")
-        else:
-            print(f"  ✗ No llegó al punto {idx} ni vía SAFE. Punto omitido.")
-        return llegó, robot
- 
-    # ── 2. Segmentos normales ─────────────────────────────────
-    segmentos = calcular_segmentos(ax, ay, az, ar, tx, ty, tz, tr)
-    n = len(segmentos)
- 
-    if n == 1:
-        print(f"\n  → Punto {idx}: X={tx} Y={ty} Z={tz} R={tr}")
-    else:
-        print(
-            f"\n  → Punto {idx}: X={tx} Y={ty} Z={tz} R={tr}  "
-            f"[interpolando en {n} segmentos]"
-        )
- 
-    # ── 3. Ejecutar segmentos ─────────────────────────────────
-    for s, (sx, sy, sz, sr) in enumerate(segmentos):
-        es_final = (s == n - 1)
- 
-        if n > 1:
-            etiqueta = f"   seg {s+1}/{n}:"
-            print(f"  {etiqueta} X={sx} Y={sy} Z={sz} R={sr}")
-        else:
-            etiqueta = f"→ Punto {idx}:"
- 
-        llegó, robot = mover_segmento(robot, sx, sy, sz, sr, etiqueta)
- 
-        # ── 4. Recuperación de alarma ─────────────────────────
+            return True, robot
+        except Exception as e:
+            print(f"  ✗ Punto {idx} omitido incluso vía SAFE: {e}")
+            return False, robot
+
+    # ── 2. Movimiento directo ─────────────────────────────────
+    try:
+        _move(robot, x, y, z, r)
+        print(f"     ✓ Llegó al punto {idx}")
+        return True, robot
+
+    except Exception as e:
+        print(f"  [ERROR] Fallo movimiento: {e}")
+
+    # ── 3. Recuperación ───────────────────────────────────────
+    print(f"  [RECOVER] Intentando limpiar alarma y reintentar…")
+    if limpiar_alarma(robot):
+        if not ir_a_safe(robot):
+            print(f"  ✗ Punto {idx} omitido (no se pudo recuperar)")
+            return False, robot
+        try:
+            _move(robot, x, y, z, r)
+            print(f"     ✓ Llegó al punto {idx} (recuperado)")
+            return True, robot
+        except Exception as e2:
+            print(f"  ✗ Reintento fallido: {e2}")
+
+    print(f"  ✗ Punto {idx} omitido")
+    return False, robot
+
+# ── Ejecución de rutina ───────────────────────────────────────────────────────
+def ejecutar_rutina(robot, puntos, num):
+    total   = len(puntos)
+    errores = 0
+
+    print(f"\n{'─'*55}")
+    print(f"  EJECUTANDO RUTINA {num}  ({total} puntos)")
+    print(f"{'─'*55}")
+
+    for idx, punto in enumerate(puntos):
+
+        # Aplicar succión ANTES del movimiento
+        set_suction(robot, punto.get("suction", False))
+
+        llegó, robot = mover_punto(robot, punto, idx)
+
         if not llegó:
-            print(f"  [ALARMA?] Fallo en seg {s+1}/{n}. Intentando recuperar…")
- 
-            limpiado = limpiar_alarma(robot)
-            if limpiado:
-                # Reintento completo vía waypoint seguro
-                print(f"  ↳ Reintentando punto {idx} vía SAFE_POINT…")
-                llegó_safe, robot = mover_via_safe(
-                    robot, tx, ty, tz, tr, idx
-                )
-                if llegó_safe:
-                    print(f"     ✓ Llegó al punto {idx} (recuperado vía SAFE)")
-                    return True, robot
-                else:
-                    print(f"  ✗ No se pudo recuperar el punto {idx}.")
-                    return False, robot
-            else:
-                print(f"  ✗ No llegó al segmento {s+1}/{n} del punto {idx}")
-                return False, robot
- 
-        if es_final:
-            print(f"     ✓ Llegó al punto {idx}")
- 
-    return True, robot
- 
+            errores += 1
+
+    # Apagar succión al terminar
+    set_suction(robot, False)
+
+    print(f"\n{'─'*55}")
+    if errores == 0:
+        print(f"  ✓ Rutina {num} completada sin errores")
+    else:
+        print(f"  ⚠ Rutina {num} completada — {errores}/{total} punto(s) omitido(s)")
+    print(f"{'─'*55}")
+
+# ── Menú ──────────────────────────────────────────────────────────────────────
+def menu(rutinas):
+    print("\n+================================================+")
+    print("|     DOBOT EJECUTAR RUTINAS  (pydobotplus)     |")
+    print("+================================================+")
+
+    if not rutinas:
+        print("  No hay rutinas grabadas.")
+        print("  Usa teach_mode.py para grabarlas primero.")
+        sys.exit(0)
+
+    for num, desc in SLOT_INFO.items():
+        if num in rutinas:
+            pts = len(rutinas[num])
+            print(f"  [{num}]  {desc:<22}  ({pts} puntos)")
+        else:
+            print(f"  [{num}]  {desc:<22}  [sin grabar]")
+
+    print("\n  [0] Salir\n")
+
+    op = input("Opción: ").strip()
+
+    if op == '0':
+        print("Saliendo…")
+        sys.exit(0)
+
+    if op not in rutinas:
+        if op in SLOT_INFO:
+            print(f"\n[INFO] La rutina {op} no está grabada todavía.")
+        else:
+            print("\n[INFO] Opción no válida.")
+        return None
+
+    return op
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+def main():
+    rutinas = cargar_rutinas()
+
+    op = menu(rutinas)
+    if op is None:
+        return
+
+    puntos = rutinas[op]
+
+    print(f"\n[RUN] Conectando a Dobot en {PORT}…")
+    try:
+        robot = Dobot(port=PORT, verbose=False)
+    except Exception as e:
+        print(f"[ERROR] No se pudo conectar: {e}")
+        sys.exit(1)
+
+    print("[RUN] Conectado ✓\n")
+
+    try:
+        ejecutar_rutina(robot, puntos, op)
+    except KeyboardInterrupt:
+        print("\n\n[RUN] Interrumpido por usuario")
+        set_suction(robot, False)
+    finally:
+        try:
+            robot.close()
+            print("[RUN] Robot desconectado")
+        except Exception:
+            pass
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nSaliendo…")
+        sys.exit(0)
