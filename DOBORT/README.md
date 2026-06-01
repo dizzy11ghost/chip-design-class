@@ -1,81 +1,20 @@
-https://pypi.org/project/pydobotplus/ 
+───────────────────────────────────────────────────────
+  GRABANDO RUTINA 6
+  AMARILLO – ft6
+───────────────────────────────────────────────────────
+  ENTER -> guardar posición actual
+  s     -> toggle succión
+  d     -> borrar último punto
+  f     -> finalizar y guardar
+  q     -> cancelar
+───────────────────────────────────────────────────────
 
-ingenierinis@raspberrypi:~ $ sudo apt update
-Hit:1 http://archive.raspberrypi.com/debian trixie InRelease
-Get:2 http://raspbian.raspberrypi.com/raspbian trixie InRelease [15.0 kB]
-Fetched 15.0 kB in 2s (6,835 B/s)                          
-415 packages can be upgraded. Run 'apt list --upgradable' to see them.
-ingenierinis@raspberrypi:~ $ python3 -m pip install pydobotplus
-error: externally-managed-environment
+[ERROR] No se pudo leer pose: tuple index out of range
 
-× This environment is externally managed
-╰─> To install Python packages system-wide, try apt install
-    python3-xyz, where xyz is the package you are trying to
-    install.
-    
-    If you wish to install a non-Debian-packaged Python package,
-    create a virtual environment using python3 -m venv path/to/venv.
-    Then use path/to/venv/bin/python and path/to/venv/bin/pip. Make
-    sure you have python3-full installed.
-    
-    For more information visit http://rptl.io/venv
+[ERROR] No se pudo leer pose: tuple index out of range
 
-note: If you believe this is a mistake, please contact your Python installation or OS distribution provider. You can override this, at the risk of breaking your Python installation or OS, by passing --break-system-packages.
-hint: See PEP 668 for the detailed specification.
-ingenierinis@raspberrypi:~ $ sudo apt install python3-pydobotplus
-Error: Unable to locate package python3-pydobotplus
-ingenierinis@raspberrypi:~ $ apt install python3-pydobotplus
-Error: Could not open lock file /var/lib/dpkg/lock-frontend - open (13: Permission denied)
-Error: Unable to acquire the dpkg frontend lock (/var/lib/dpkg/lock-frontend), are you root?
-ingenierinis@raspberrypi:~ $ sudo apt install python3-pydobotplus
-Error: Unable to locate package python3-pydobotplus
-ingenierinis@raspberrypi:~ $ sudo apt install python3-dobotplus
-Error: Unable to locate package python3-dobotplus
-ingenierinis@raspberrypi:~ $ python3 -m pip install pydobotplus
-error: externally-managed-environment
+[ERROR] No se pudo leer pose: tuple index out of range
 
-× This environment is externally managed
-╰─> To install Python packages system-wide, try apt install
-    python3-xyz, where xyz is the package you are trying to
-    install.
-    
-    If you wish to install a non-Debian-packaged Python package,
-    create a virtual environment using python3 -m venv path/to/venv.
-    Then use path/to/venv/bin/python and path/to/venv/bin/pip. Make
-    sure you have python3-full installed.
-    
-    For more information visit http://rptl.io/venv
-
-note: If you believe this is a mistake, please contact your Python installation or OS distribution provider. You can override this, at the risk of breaking your Python installation or OS, by passing --break-system-packages.
-hint: See PEP 668 for the detailed specification.
-ingenierinis@raspberrypi:~ $ sudo apt python3 -m pip install pydobotplus
-Error: Invalid operation python3
-ingenierinis@raspberrypi:~ $ pip install pydobotplus
-error: externally-managed-environment
-
-× This environment is externally managed
-╰─> To install Python packages system-wide, try apt install
-    python3-xyz, where xyz is the package you are trying to
-    install.
-    
-    If you wish to install a non-Debian-packaged Python package,
-    create a virtual environment using python3 -m venv path/to/venv.
-    Then use path/to/venv/bin/python and path/to/venv/bin/pip. Make
-    sure you have python3-full installed.
-    
-    For more information visit http://rptl.io/venv
-
-note: If you believe this is a mistake, please contact your Python installation or OS distribution provider. You can override this, at the risk of breaking your Python installation or OS, by passing --break-system-packages.
-hint: See PEP 668 for the detailed specification.
-ingenierinis@raspberrypi:~ $ sudo apt ^[[200~pip install pydobotplus
-^[[201~Error: Invalid operation pip
-ingenierinis@raspberrypi:~ $ sudo apt pip install pydobotplus
-Error: Invalid operation pip
-ingenierinis@raspberrypi:~ $ pyhton3 -m pip install pydobotplus
-bash: pyhton3: command not found
-ingenierinis@raspberrypi:~ $ apt install python3-pydobotplus
-Error: Could not open lock file /var/lib/dpkg/lock-frontend - open (13: Permission denied)
-Error: Unable to acquire the dpkg frontend lock (/var/lib/dpkg/lock-frontend), are you root?
 
 
 "1": [
@@ -462,3 +401,4 @@ Traceback (most recent call last):
   File "/usr/lib/python3/dist-packages/lgpio.py", line 458, in _u2i
     raise error(error_text(v))
 lgpio.error: 'GPIO busy'
+
