@@ -38,7 +38,7 @@ PINES UART en Raspberry Pi 3 (para conectar al Dobot):
 """
 
 import time
-from dobotplus import Dobot
+from pydobotplus import Dobot
 
 # ============================================================
 # CONFIGURACIÓN - Cambia esto según tu setup
@@ -52,7 +52,7 @@ def inicializar_dobot(puerto):
     """Inicializa la conexión con el Dobot Magician."""
     print(f"[INFO] Conectando al Dobot en {puerto}...")
     try:
-        robot = Dobot(port=puerto, verbose=False)
+        robot = Dobot(port=puerto)
         print("[OK] ¡Dobot conectado exitosamente!")
         return robot
     except Exception as e:
