@@ -73,20 +73,10 @@ def imprimir_rutina(puntos):
 
 # ── Lectura de pose con pydobotplus ───────────────────────────────────────────
 def leer_pose(robot):
-    """
-    pydobotplus expone pose() → (x, y, z, r, j1, j2, j3, j4).
-    Devuelve (x, y, z, r) o None si falla.
-    """
     try:
         pose = robot.get_pose()
-        return pose.x, pose.y, pose.z, pose.r
-    except AttributeError:
-        try:
-            pose = robot.pose()
-            return pose[0], pose[1], pose[2], pose[3]
-        except Exception as e:
-            print(f"\n[ERROR] No se pudo leer pose: {e}")
-            return None
+        p = pose.position
+        return p.x, p.y, p.z, p.r
     except Exception as e:
         print(f"\n[ERROR] No se pudo leer pose: {e}")
         return None
