@@ -38,7 +38,7 @@ PINES UART en Raspberry Pi 3 (para conectar al Dobot):
 """
 
 import time
-from dobotplus import Dobot, DobotException
+from dobotplus import Dobot
 
 # ============================================================
 # CONFIGURACIÓN - Cambia esto según tu setup
@@ -154,9 +154,6 @@ def main():
 
         # Ejecutar demo de movimientos
         demo_movimientos(robot)
-
-    except DobotException as e:
-        print(f"[ERROR Dobot] {e}")
 
     except KeyboardInterrupt:
         print("\n[INFO] Script interrumpido por el usuario.")
