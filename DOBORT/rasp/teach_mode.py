@@ -78,8 +78,15 @@ def leer_pose(robot):
     Devuelve (x, y, z, r) o None si falla.
     """
     try:
-        pose = robot.pose()
-        return pose[0], pose[1], pose[2], pose[3]
+        pose = robot.get_pose()
+        return pose.x, pose.y, pose.z, pose.r
+    except AttributeError:
+        try:
+            pose = robot.pose()
+            return pose[0], pose[1], pose[2], pose[3]
+        except Exception as e:
+            print(f"\n[ERROR] No se pudo leer pose: {e}")
+            return None
     except Exception as e:
         print(f"\n[ERROR] No se pudo leer pose: {e}")
         return None
