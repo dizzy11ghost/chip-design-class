@@ -35,7 +35,7 @@ focal_length_m  = focal_length_px * pixel_size
 ARUCO_CARRO   = 25
 ARUCO_BRAZO   = 50
 ARUCO_USUARIO = 10
-DISTANCIA_LLEGADA_CM = 10.0  # cm — ajustar según pruebas
+DISTANCIA_LLEGADA_CM = 78.0  # cm — ajustar según pruebas
 
 # Rutinas del dobot ---------------------------------------------
 with open('rutinas.json', 'r', encoding='utf-8') as archivo:
@@ -128,9 +128,9 @@ def detectar_arucos(frame): #vectores de posición de los marcadores
         #dibujamos para UI
         pts_int = pts.astype(int)
         cv2.polylines(frame, [pts_int], True, (0, 255, 0), 2)
-        cv2.putText(frame, f"ID:{marker_id} {distance_z:.2f}m",
+        cv2.putText(frame, f"ID:{marker_id}m",
                 (pts_int[0][0], pts_int[0][1] - 10),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1)
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (25,255,255), 1)
 
     return posiciones, frame
 
@@ -199,7 +199,7 @@ color_candidato  = None
 
 #navegación
 nav_origen           = None
-nav_destino          = None
+nav_referencia          = None
 nav_signal           = None
 nav_siguiente_estado = None
 
@@ -255,8 +255,9 @@ while True:
                 rutina_elegida = numero
                 modo_actual    = RECIBIR
                 # FIX: modo RECIBIR navega carro→brazo primero, igual que ACOMODAR
+                #calculamos cuando haya una distancia de 78cm entre el punto de inicio y el ArUco del carrito 
                 nav_origen           = ARUCO_CARRO
-                nav_destino          = ARUCO_BRAZO
+                nav_referencia          = ARUCO_USUARIO
                 nav_signal           = "KUB"
                 nav_siguiente_estado = RUN
                 estado               = NAVEGAR
@@ -289,7 +290,7 @@ while True:
         if rutina_elegida is not None:
             print(f"[Slot libre → rutina {rutina_elegida}")
             nav_origen           = ARUCO_CARRO
-            nav_destino          = ARUCO_BRAZO
+            nav_referencia         = ARUCO_USUARIO
             nav_signal           = "KUB"
             nav_siguiente_estado = RUN
             estado               = NAVEGAR
@@ -301,10 +302,10 @@ while True:
             estado = IDLE
 
     elif estado == NAVEGAR:
-        distancia = calcular_distancia(posiciones, nav_origen, nav_destino)
+        distancia = calcular_distancia(posiciones, nav_origen, nav_referencia)
         if distancia is not None:
             distancia_cm = int(distancia * 100)
-            distancia_cm = min(distancia_cm, 999)  # clamp para no pasarte de 3 dígitos
+            distancia_cm = min(distancia_cm, 999)  # clamp para no pasar de 3 dígitos
             
             centenas = (distancia_cm // 100) % 10
             decenas  = (distancia_cm //  10) % 10
@@ -315,7 +316,7 @@ while True:
             bt_send("carro", str(unidades))
             print(f"[NAV] {distancia_cm} cm → {centenas}{decenas}{unidades}")
 
-            if distancia_cm <= DISTANCIA_LLEGADA_CM:
+            if distancia_cm >= DISTANCIA_LLEGADA_CM:
                 print("[NAV] Destino alcanzado")
                 estado = nav_siguiente_estado
 
@@ -327,8 +328,8 @@ while True:
                 # FIX: tras depositar, navegar brazo→usuario y avisar ML al master
                 bt_send("master", 'M', 'L')
                 bt_send("carro", "KBU")
-                nav_origen           = ARUCO_BRAZO
-                nav_destino          = ARUCO_USUARIO
+                nav_origen           = ARUCO_CARRO
+                nav_referencia         = ARUCO_BRAZO
                 nav_signal           = "KBU"
                 nav_siguiente_estado = IDLE
                 estado               = NAVEGAR
@@ -337,8 +338,8 @@ while True:
                 # FIX: tras recoger, avisar MR al master y volver a IDLE
                 bt_send("master", 'M', 'R')
                 bt_send("carro", "KBU")
-                nav_origen           = ARUCO_BRAZO
-                nav_destino          = ARUCO_USUARIO
+                nav_origen           = ARUCO_CARRO
+                nav_referencia         = ARUCO_BRAZO
                 nav_signal           = "KBU"
                 nav_siguiente_estado = IDLE
                 estado               = NAVEGAR
