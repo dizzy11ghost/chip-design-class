@@ -216,7 +216,7 @@ def menu():
 
         print(f"\n[TEACH] Conectando a Dobot en {PORT}…")
         try:
-            robot = Dobot(port=PORT, verbose=False)
+            robot = Dobot(port=PORT)
         except Exception as e:
             print(f"[ERROR] No se pudo conectar: {e}")
             return
