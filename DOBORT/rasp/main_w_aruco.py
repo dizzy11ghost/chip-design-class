@@ -41,6 +41,12 @@ DISTANCIA_LLEGADA_CM = 78.0  # cm — ajustar según pruebas
 with open('rutinas.json', 'r', encoding='utf-8') as archivo:
     rutinas = json.load(archivo)
 
+#config dobot -----------------------------------------------
+VELOCIDAD = 100 
+ACELERACION = 100
+MODO_MOVIMIENTO = 0X01 #movimiento por joints
+UMBRAL_DESVIACION_MM = 2.0 #calcular desviaciones entre calibración y ejecución actual
+
 # configuración de pines GPIO ----------------------------------
 PINES_FT = { "ft1": 17, "ft2": 22, "ft3": 23, "ft4": 24, "ft5": 25, "ft6": 27}
 for pin in PINES_FT.values():
@@ -88,7 +94,7 @@ cap = cv2.VideoCapture(0)
 lower_red1   = np.array([0,   100, 100]); upper_red1   = np.array([10,  255, 255])
 lower_red2   = np.array([170, 100, 100]); upper_red2   = np.array([180, 255, 255])
 lower_blue   = np.array([100, 100, 100]); upper_blue   = np.array([140, 255, 255])
-lower_yellow = np.array([22,  93,  0  ]); upper_yellow = np.array([45,  255, 255])
+lower_yellow = np.array([10,  100, 100]); upper_yellow = np.array([25,  255, 255])
 
 # Funciones auxiliares ------------------------------------------------------
 def leer_ft(nombre):
@@ -166,6 +172,20 @@ def verificar_rutina_recibir(numero):
     print(f"[FT] {ft_nombre} = {valor} ({'ocupado' if valor == 1 else 'vacío'})")
     return numero if valor == 1 else None
 
+#funciones de corrección y gestión de mov del Dobot
+def obtener_posicion_actual(robot): #obtenemos coords actuales del Dobot para comparar con la rutina y corregir desviaciones
+    try:
+        pose = robot.get_pose()
+        return {"x": pose.x, "y": pose.y, "z": pose.z, "r": pose.r}
+    except Exception as e:
+        print(f"  [WARN] No se pudo leer posición actual: {e}")
+        return None 
+
+def calcular_desviacion(pos_real, punto_esperado):
+    ejes   = ["x", "y", "z"]
+    deltas = {eje: abs(pos_real[eje] - punto_esperado[eje]) for eje in ejes}
+    return max(deltas.values()), deltas
+
 def ejecutar_rutina_dobot(robot, numero): #cuando recibe RL o RE
     clave = str(numero)
     if clave not in rutinas:
@@ -173,34 +193,71 @@ def ejecutar_rutina_dobot(robot, numero): #cuando recibe RL o RE
         return False
     puntos = rutinas[clave]
     print(f"[DOBOT] Ejecutando rutina {clave} ({len(puntos)} puntos)")
-    for i, p in enumerate(puntos):
-        print(f"  Punto {i}: x={p['x']} y={p['y']} z={p['z']} r={p['r']} suc={p['suction']}")
-        robot.move_to(p['x'], p['y'], p['z'], p['r'], wait=True)
-        try:
-            robot.suck(enable=p['suction'])
-        except TypeError:
-            robot.suck(p['suction'])
-        time.sleep(0.5)
+    #config velocidad
     try:
-        robot.suck(False)
+        robot.speed(velocity=VELOCIDAD, acceleration=ACELERACION)
     except Exception:
         pass
-    print(f"[DOBOT] Rutina {clave} completada")
-    return True
+    primer = puntos[0]
+    print(f"moviendo hacia punto inicial")
+    try: 
+        robot.move_to(primer["x"], primer["y"], primer["z"], primer["r"], wait=True)
+        time.sleep(0.5) 
+    except Exception as e:
+        print(f"  [ERROR] No se pudo mover a punto inicial: {e}")
+        return False
+    correcciones = 0
+    try:
+        for i, p in enumerate(puntos):
+            x = p["x"]
+            y = p["y"]
+            z = p["z"]
+            r = p["r"]
+            suc = p.get("suction", False)
 
+            #ahora si, verificamos la posición, si hay desviaciones reposicionamos antes de continuar
+            if i > 0:
+                pos_real = obtener_posicion_actual(robot)
+                if pos_real is not None:
+                    desviacion, deltas = calcular_desviacion(pos_real, puntos[i - 1])
+                    if desviacion > UMBRAL_DESVIACION_MM:
+                        correcciones += 1
+                        ant = puntos[i - 1]
+                        print (f"[CORRECCIÓN #{correcciones}] punto {i} —Δx:{deltas['x']:.1f} Δy:{deltas['y']:.1f} Δz:{deltas['z']:.1f} mm. ")
+                        robot.move_to(ant["x"], ant["y"], ant["z"], ant["r"], wait=True)
+                        time.sleep(0.3)
+                    else:
+                        print(f"  [OK] punto {i} — desviación {desviacion:.1f} mm dentro del umbral")
+                        
+            
+            robot.move_to(x, y, z, r, wait=True)
+            try:
+                robot.suck(enable = suc)
+            except Exception:
+                pass
+            print ("Rutina completada adecuadamente")
+        try:
+                robot.suck(enable = False)
+        except Exception:
+            pass
+        return False
+    except Exception as e:
+        print(f"  [ERROR] Ejecución interrumpida en punto {i}: {e}")
+        return False
+            
 #note to self!!! Checar si esta calibración aproximada basta o hay que calibrar con un tablero de ajedrez para obtener coords 3D
-estado         = IDLE
-modo_actual    = None   # "ACOMODAR" | "RECIBIR"
-color_paquete  = None
+estado = IDLE
+modo_actual = None   # "ACOMODAR" | "RECIBIR"
+color_paquete = None
 rutina_elegida = None
 FRAMES_THRESHOLD = 20
-contador_conf    = 0
-color_candidato  = None
+contador_conf = 0
+color_candidato = None
 
 #navegación
-nav_origen           = None
-nav_referencia          = None
-nav_signal           = None
+nav_origen = None
+nav_referencia = None
+nav_signal = None
 nav_siguiente_estado = None
 
 # Inicialización -------------------------------------------------------------
@@ -219,7 +276,7 @@ print("¡Conectado!")
 print("Esperando señal BT...")
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
-roi       = None
+roi = None
 posiciones = {}  # FIX: inicializar en scope del loop principal
 
 while True:
@@ -347,12 +404,12 @@ while True:
         else:
             estado = IDLE
 
-    if roi is not None:
-        cv2.putText(roi, f"Estado: {estado} | Modo: {modo_actual}",
+    if frame is not None:
+        cv2.putText(frame, f"Estado: {estado} | Modo: {modo_actual}",
                     (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,255,255), 2)
-        cv2.putText(roi, f"Color: {color_detectado} | Cand: {color_candidato} x{contador_conf}",
+        cv2.putText(frame, f"Color: {color_detectado} | Cand: {color_candidato} x{contador_conf}",
                     (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200,200,0), 2)
-    cv2.imshow("Deteccion", roi)
+    cv2.imshow("Deteccion", frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
