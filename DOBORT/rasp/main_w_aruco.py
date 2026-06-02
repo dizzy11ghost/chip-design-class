@@ -10,7 +10,7 @@ import queue
 import os
 
 #conf general ----------------------------------------------------
-PORT = "/dev/ttyAMA0" 
+PORT = "/dev/ttyS0" 
 GPIO.setmode(GPIO.BCM)
 
 # Estados ------------------------------------------------------
@@ -62,7 +62,7 @@ UMBRAL_DESVIACION_MM = 2.0 #calcular desviaciones entre calibración y ejecució
 # configuración de pines GPIO ----------------------------------
 PINES_FT = { "ft1": 17, "ft2": 22, "ft3": 23, "ft4": 24, "ft5": 25, "ft6": 27}
 for pin in PINES_FT.values():
-    GPIO.setup(pin, GPIO.IN)
+    GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
 # Bluetooth ----------------------------------------------------
 ser_master = serial.Serial('/dev/rfcomm1', 9600, timeout=0.1)  # Master (comm1)
