@@ -7,6 +7,7 @@ import json
 import serial
 import threading
 import queue
+import os
 
 #conf general ----------------------------------------------------
 PORT = "/dev/ttyAMA0" 
@@ -38,8 +39,19 @@ ARUCO_USUARIO = 10
 DISTANCIA_LLEGADA_CM = 78.0  # cm — ajustar según pruebas
 
 # Rutinas del dobot ---------------------------------------------
-with open('rutinas.json', 'r', encoding='utf-8') as archivo:
-    rutinas = json.load(archivo)
+CARPETA_RUTINAS = "rutinas"
+
+def cargar_rutinas_todas():
+    rutinas = {}
+    for i in range(1, 13):  # rutina_01 a rutina_12
+        ruta = os.path.join(CARPETA_RUTINAS, f"rutina_{i:02d}.json")
+        if os.path.exists(ruta):
+            with open(ruta, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            rutinas[str(i)] = data.get("rutina", [])
+    return rutinas
+
+rutinas = cargar_rutinas_todas()
 
 #config dobot -----------------------------------------------
 VELOCIDAD = 100 
