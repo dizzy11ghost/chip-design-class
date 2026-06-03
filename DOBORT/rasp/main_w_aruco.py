@@ -213,8 +213,8 @@ def ejecutar_rutina_dobot(robot, numero): #cuando recibe RL o RE
     primer = puntos[0]
     print(f"moviendo hacia punto inicial")
     try: 
-        robot.move_to(primer["x"], primer["y"], primer["z"], primer["r"], wait=True)
-        time.sleep(0.5) 
+        robot.move_to(primer["x"], primer["y"], primer["z"], primer["r"], wait=True, mode=MODO_MOVIMIENTO)
+        time.sleep(0.3) 
     except Exception as e:
         print(f"  [ERROR] No se pudo mover a punto inicial: {e}")
         return False
@@ -236,23 +236,21 @@ def ejecutar_rutina_dobot(robot, numero): #cuando recibe RL o RE
                         correcciones += 1
                         ant = puntos[i - 1]
                         print (f"[CORRECCIÓN #{correcciones}] punto {i} —Δx:{deltas['x']:.1f} Δy:{deltas['y']:.1f} Δz:{deltas['z']:.1f} mm. ")
-                        robot.move_to(ant["x"], ant["y"], ant["z"], ant["r"], wait=True)
+                        robot.move_to(ant["x"], ant["y"], ant["z"], ant["r"], wait=True, mode=MODO_MOVIMIENTO)
                         time.sleep(0.3)
                     else:
                         print(f"  [OK] punto {i} — desviación {desviacion:.1f} mm dentro del umbral")
                         
             
-            robot.move_to(x, y, z, r, wait=True)
-            try:
-                robot.suck(enable = suc)
-            except Exception:
-                pass
+            robot.move_to(x, y, z, r, wait=True, mode=MODO_MOVIMIENTO)
+            robot.suck(suc)
+            time.sleep(0.3)
             print ("Rutina completada adecuadamente")
         try:
-                robot.suck(enable = False)
+                robot.suck(suc=False)
         except Exception:
             pass
-        return False
+        return True
     except Exception as e:
         print(f"  [ERROR] Ejecución interrumpida en punto {i}: {e}")
         return False
@@ -283,7 +281,7 @@ threading.Thread(target=receive_loop,
                  args=(ser_carro,  bt_queue_carro,  "CARRO"),
                  daemon=True).start()
 print("Conectando al Dobot Magician...")
-robot = pydobot.Dobot(port=PORT, verbose=False)
+robot = Dobot(port=PORT)
 print("¡Conectado!")
 print("Esperando señal BT...")
 
@@ -419,7 +417,8 @@ while True:
 
 # Cleanup
 robot.move_to(50, 25, 50, 0, wait=True)
-ser.close()
+ser_master.close()
+ser_carro.close()
 cap.release()
 cv2.destroyAllWindows()
 GPIO.cleanup()
