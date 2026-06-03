@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import RPi.GPIO as GPIO
 import time
-import pydobot
+from pydobotplus import Dobot
 import json
 import serial
 import threading
@@ -36,7 +36,7 @@ focal_length_m  = focal_length_px * pixel_size
 ARUCO_CARRO   = 25
 ARUCO_BRAZO   = 50
 ARUCO_USUARIO = 10
-DISTANCIA_LLEGADA_CM = 78.0  # cm — ajustar según pruebas
+DISTANCIA_LLEGADA_CM = 2.0  # cm — ajustar según pruebas
 
 # Rutinas del dobot ---------------------------------------------
 CARPETA_RUTINAS = "rutinas"
@@ -60,7 +60,7 @@ MODO_MOVIMIENTO = 0X01 #movimiento por joints
 UMBRAL_DESVIACION_MM = 2.0 #calcular desviaciones entre calibración y ejecución actual
 
 # configuración de pines GPIO ----------------------------------
-PINES_FT = { "ft1": 17, "ft2": 22, "ft3": 23, "ft4": 24, "ft5": 25, "ft6": 27}
+PINES_FT = { "ft1": 17, "ft4": 22, "ft3": 4, "ft2": 24, "ft6": 25, "ft5": 27}
 for pin in PINES_FT.values():
     GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
@@ -376,17 +376,9 @@ while True:
             distancia_cm = int(distancia * 100)
             distancia_cm = min(distancia_cm, 999)  # clamp para no pasar de 3 dígitos
             
-            centenas = (distancia_cm // 100) % 10
-            decenas  = (distancia_cm //  10) % 10
-            unidades =  distancia_cm         % 10
-
-            bt_send("carro", str(centenas))
-            bt_send("carro", str(decenas))
-            bt_send("carro", str(unidades))
-            print(f"[NAV] {distancia_cm} cm → {centenas}{decenas}{unidades}")
-
             if distancia_cm >= DISTANCIA_LLEGADA_CM:
                 print("[NAV] Destino alcanzado")
+                bt_send("carro", "KST")
                 estado = nav_siguiente_estado
 
     elif estado == RUN:
