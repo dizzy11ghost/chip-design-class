@@ -150,17 +150,36 @@ def detectar_arucos(frame): #vectores de posición de los marcadores
                 (pts_int[0][0], pts_int[0][1] - 10),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (25,255,255), 1)
 
-    return posiciones, frame
+    return posiciones, frame, ids
 
-def calcular_distancia(posiciones, origen_id, destino_id):
-    if origen_id not in posiciones:
-        return None
-    if destino_id not in posiciones:
-        return None
-    p1 = posiciones[origen_id]
-    p2 = posiciones[destino_id]
-    distancia = abs(p1[2] - p2[2])
-    return distancia
+def carril(posiciones, destino_id, marker_id, frame):
+    height, width, _ = frame.shape
+    parte = height // 6
+    y_inicio = height - (2 * parte)
+    y_fin    = height - (1 * parte)
+    roa = frame[y_inicio:y_fin, :]
+
+    #necesitamos detectar si el carrito está dentro de roa constantemente, para eso usamos todo el rectangulo en horizontal que roa crea
+    #necesitamos tmb detectar si el carrito llega a un estacionamiento de los dos que tiene disponibles, para eso checanos si el aruco del carrito esta en alguna de estas regiones
+    if marker_id in posiciones:
+        cx, cy, _ = posiciones[marker_id] #obtenemos el centro del marcador del carrito para saber dónde está dentro de roa, y así detectar si está en carril o en algún parking
+        resultado = None
+        if y_inicio <= cy < y_fin: #si el carrito está dentro de roa, entonces chequeamos en qué parte del carril está para detectar si va por carril o ya llegó a algún parking
+            #para el estacio amiento, vamos a partir verticalmente roa en 8 pedazos,
+            #el parking b estará en el 8vo final, y el parking u en el 8vo inicial, dejando el espacio del medio para que el carrito pueda entrar y salir de los parkings sin problemas
+            if cx < width * 0.125 and destino_id == ARUCO_BRAZO: #si el carrito está en el 8vo inicial yendo hacia el brazo, entonces llegó al parking del brazo
+                resultado = "LLEGADA"
+            elif cx > width * 0.875 and destino_id == ARUCO_USUARIO:
+                resultado = "LLEGADA"
+            else:
+                resultado = "CARRIL" #si el carrito está dentro de roa pero no llegó a ningún parking, entonces sigue en carril
+        elif cy <= y_inicio: #si el carrito esta "abajo" de roa
+            resultado = "KCD" #mandaremos señal de corregir derecho para corregir la trayectoria del carrito hacia el carril
+        elif cy >= y_fin: #si el carrito esta "arriba" de roa
+            resultado = "KCI" #mandaremos señal de corregir izquierdo para corregir la trayectoria del carrito hacia el carril
+        else:
+            resultado = None
+    return resultado
 
 def decidir_rutina_acomodar(color): #para modo acomodar
     slots = {
@@ -285,7 +304,7 @@ robot = Dobot(port=PORT)
 print("¡Conectado!")
 print("Esperando señal BT...")
 
-# ── Main loop ─────────────────────────────────────────────────────────────────
+# MAIN LOOP ----------------------------------------------------------------------------
 roi = None
 posiciones = {}  # FIX: inicializar en scope del loop principal
 
@@ -368,16 +387,19 @@ while True:
             bt_send("master", 'M', 'E')
             estado = IDLE
 
-    elif estado == NAVEGAR:
-        distancia = calcular_distancia(posiciones, nav_origen, nav_referencia)
-        if distancia is not None:
-            distancia_cm = int(distancia * 100)
-            distancia_cm = min(distancia_cm, 999)  # clamp para no pasar de 3 dígitos
-            
-            if distancia_cm >= DISTANCIA_LLEGADA_CM:
-                print("[NAV] Destino alcanzado")
-                bt_send("carro", "KST")
-                estado = nav_siguiente_estado
+    elif estado == NAVEGAR: #NAVEGAAAAAAAR --------------------------------------------------------
+        destino = "BRAZO" if nav_referencia == ARUCO_BRAZO else "USUARIO"
+        resultado = carril(posiciones, nav_origen, nav_referencia, ARUCO_CARRO, frame)
+        if resultado == "LLEGADA":
+            estado = nav_siguiente_estado
+            print(f"[FSM] LLEGADA a {destino} → {estado}")
+            bt_send("carro", "KST")
+        elif resultado == "KCD":
+            bt_send("carro", "KCD")
+            print(f"[NAV] Corrección derecha enviada: KCD")
+        elif resultado == "KCI":
+            bt_send("carro", "KCI")
+            print(f"[NAV] Corrección izquierda enviada: KCI")
 
     elif estado == RUN:
         print(f"[SYS] Iniciando ejecución → rutina {rutina_elegida} | Modo: {modo_actual}")
@@ -406,16 +428,41 @@ while True:
         else:
             estado = IDLE
 
+    #dibujamos las zonas de navegación para ver qué show ---------------------------------------------------------------------
     if frame is not None:
-        cv2.putText(frame, f"Estado: {estado} | Modo: {modo_actual}",
-                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,255,255), 2)
-        cv2.putText(frame, f"Color: {color_detectado} | Cand: {color_candidato} x{contador_conf}",
-                    (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200,200,0), 2)
+        h, w, _ = frame.shape
+        parte    = h // 6
+        # ROI (detección de color) — mitad inferior
+        roi_y = h // 2
+        cv2.rectangle(frame, (0, roi_y), (w, h), (0, 255, 255), 2)
+        cv2.putText(frame, "ROI color", (5, roi_y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+        # ROA (carril) — franja entre h-2*parte y h-1*parte
+        roa_y1 = h - (2 * parte)
+        roa_y2 = h - (1 * parte)
+        cv2.rectangle(frame, (0, roa_y1), (w, roa_y2), (255, 255, 0), 2)
+        cv2.putText(frame, "ROA carril", (5, roa_y1 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+
+        # Parking Brazo — 8vo izquierdo dentro de ROA
+        pb_x2 = int(w * 0.125)
+        cv2.rectangle(frame, (0, roa_y1), (pb_x2, roa_y2), (0, 128, 255), 2)
+        cv2.putText(frame, "PKB", (5, roa_y1 + 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 128, 255), 1)
+
+        # Parking Usuario — 8vo derecho dentro de ROA
+        pu_x1 = int(w * 0.875)
+        cv2.rectangle(frame, (pu_x1, roa_y1), (w, roa_y2), (255, 0, 128), 2)
+        cv2.putText(frame, "PKU", (pu_x1 + 5, roa_y1 + 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 128), 1)
+
+        # Info de estado
+        cv2.putText(frame, f"Estado: {estado} | Modo: {modo_actual}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        cv2.putText(frame, f"Color: {color_detectado} | Cand: {color_candidato} x{contador_conf}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 0), 2)
+        if estado == NAVEGAR:
+            cv2.putText(frame, f"NAV destino: {'BRAZO' if nav_referencia == ARUCO_BRAZO else 'USUARIO'}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 200, 255), 2)
+
     cv2.imshow("Deteccion", frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
-
-# Cleanup
+        
+ # Cleanup
 robot.move_to(50, 25, 50, 0, wait=True)
 ser_master.close()
 ser_carro.close()
