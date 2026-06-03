@@ -114,7 +114,7 @@ def leer_ft(nombre):
 
 def detectar_color(frame):
     height, width, _ = frame.shape
-    roi = frame[int(height * 0.5):, :]
+    roi = frame[:int(height * 0.5), :]
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
     mask_red    = (cv2.inRange(hsv, lower_red1, upper_red1) | cv2.inRange(hsv, lower_red2, upper_red2))
     mask_blue   = cv2.inRange(hsv, lower_blue,   upper_blue)
@@ -150,36 +150,34 @@ def detectar_arucos(frame): #vectores de posición de los marcadores
                 (pts_int[0][0], pts_int[0][1] - 10),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (25,255,255), 1)
 
-    return posiciones, frame, ids
+    return posiciones, frame
 
 def carril(posiciones, destino_id, marker_id, frame):
     height, width, _ = frame.shape
     parte = height // 6
-    y_inicio = height - (2 * parte)
-    y_fin    = height - (1 * parte)
+    y_inicio = 4 * parte
+    y_fin    = 5 * parte
     roa = frame[y_inicio:y_fin, :]
 
     #necesitamos detectar si el carrito está dentro de roa constantemente, para eso usamos todo el rectangulo en horizontal que roa crea
     #necesitamos tmb detectar si el carrito llega a un estacionamiento de los dos que tiene disponibles, para eso checanos si el aruco del carrito esta en alguna de estas regiones
     if marker_id in posiciones:
         cx, cy, _ = posiciones[marker_id] #obtenemos el centro del marcador del carrito para saber dónde está dentro de roa, y así detectar si está en carril o en algún parking
-        resultado = None
         if y_inicio <= cy < y_fin: #si el carrito está dentro de roa, entonces chequeamos en qué parte del carril está para detectar si va por carril o ya llegó a algún parking
             #para el estacio amiento, vamos a partir verticalmente roa en 8 pedazos,
             #el parking b estará en el 8vo final, y el parking u en el 8vo inicial, dejando el espacio del medio para que el carrito pueda entrar y salir de los parkings sin problemas
             if cx < width * 0.125 and destino_id == ARUCO_BRAZO: #si el carrito está en el 8vo inicial yendo hacia el brazo, entonces llegó al parking del brazo
-                resultado = "LLEGADA"
+                return "LLEGADA"
             elif cx > width * 0.875 and destino_id == ARUCO_USUARIO:
-                resultado = "LLEGADA"
+                return "LLEGADA"
             else:
                 resultado = "CARRIL" #si el carrito está dentro de roa pero no llegó a ningún parking, entonces sigue en carril
-        elif cy <= y_inicio: #si el carrito esta "abajo" de roa
-            resultado = "KCD" #mandaremos señal de corregir derecho para corregir la trayectoria del carrito hacia el carril
+        elif cy < y_inicio: #si el carrito esta "abajo" de roa
+            return "KCI" #mandaremos señal de corregir derecho para corregir la trayectoria del carrito hacia el carril
         elif cy >= y_fin: #si el carrito esta "arriba" de roa
-            resultado = "KCI" #mandaremos señal de corregir izquierdo para corregir la trayectoria del carrito hacia el carril
+            return "KCD" #mandaremos señal de corregir izquierdo para corregir la trayectoria del carrito hacia el carril
         else:
-            resultado = None
-    return resultado
+            return None
 
 def decidir_rutina_acomodar(color): #para modo acomodar
     slots = {
@@ -389,17 +387,17 @@ while True:
 
     elif estado == NAVEGAR: #NAVEGAAAAAAAR --------------------------------------------------------
         destino = "BRAZO" if nav_referencia == ARUCO_BRAZO else "USUARIO"
-        resultado = carril(posiciones, nav_origen, nav_referencia, ARUCO_CARRO, frame)
+        resultado = carril(posiciones, nav_referencia, ARUCO_CARRO, frame)
         if resultado == "LLEGADA":
             estado = nav_siguiente_estado
             print(f"[FSM] LLEGADA a {destino} → {estado}")
             bt_send("carro", "KST")
-        elif resultado == "KCD":
-            bt_send("carro", "KCD")
-            print(f"[NAV] Corrección derecha enviada: KCD")
         elif resultado == "KCI":
             bt_send("carro", "KCI")
             print(f"[NAV] Corrección izquierda enviada: KCI")
+        elif resultado == "KCD":
+            bt_send("carro", "KCD")
+            print(f"[NAV] Corrección derecha enviada: KCD")
 
     elif estado == RUN:
         print(f"[SYS] Iniciando ejecución → rutina {rutina_elegida} | Modo: {modo_actual}")
@@ -434,24 +432,21 @@ while True:
         parte    = h // 6
         # ROI (detección de color) — mitad inferior
         roi_y = h // 2
-        cv2.rectangle(frame, (0, roi_y), (w, h), (0, 255, 255), 2)
+        cv2.rectangle(frame, (0, 0), (w, roi_y), (224, 150, 211), 2)
         cv2.putText(frame, "ROI color", (5, roi_y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
         # ROA (carril) — franja entre h-2*parte y h-1*parte
-        roa_y1 = h - (2 * parte)
-        roa_y2 = h - (1 * parte)
-        cv2.rectangle(frame, (0, roa_y1), (w, roa_y2), (255, 255, 0), 2)
+        roa_y1 = h - (4 * parte)
+        roa_y2 = h - (5 * parte)
+        cv2.rectangle(frame, (0, roa_y1), (w, roa_y2), (178, 22, ), 2)
         cv2.putText(frame, "ROA carril", (5, roa_y1 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
-
         # Parking Brazo — 8vo izquierdo dentro de ROA
         pb_x2 = int(w * 0.125)
         cv2.rectangle(frame, (0, roa_y1), (pb_x2, roa_y2), (0, 128, 255), 2)
         cv2.putText(frame, "PKB", (5, roa_y1 + 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 128, 255), 1)
-
         # Parking Usuario — 8vo derecho dentro de ROA
         pu_x1 = int(w * 0.875)
         cv2.rectangle(frame, (pu_x1, roa_y1), (w, roa_y2), (255, 0, 128), 2)
         cv2.putText(frame, "PKU", (pu_x1 + 5, roa_y1 + 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 128), 1)
-
         # Info de estado
         cv2.putText(frame, f"Estado: {estado} | Modo: {modo_actual}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
         cv2.putText(frame, f"Color: {color_detectado} | Cand: {color_candidato} x{contador_conf}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 0), 2)
