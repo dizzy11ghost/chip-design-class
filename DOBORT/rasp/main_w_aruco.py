@@ -183,11 +183,11 @@ def carril(posiciones, destino_id, marker_id, frame):
         else:
             return None
 
-def decidir_rutina_acomodar(color): #para modo acomodar
+def decidir_rutina_acomodar(color):
     slots = {
-        "ROJO":     [("ft1", 1), ("ft4", 4)],
-        "AZUL":     [("ft2", 2), ("ft5", 5)],
-        "AMARILLO": [("ft3", 3), ("ft6", 6)],
+        "ROJO":     [("ft1", 7),  ("ft4", 10)],
+        "AZUL":     [("ft2", 8),  ("ft5", 11)],
+        "AMARILLO": [("ft3", 9),  ("ft6", 12)],
     }
     for ft_nombre, numero_rutina in slots[color]:
         valor = leer_ft(ft_nombre)
