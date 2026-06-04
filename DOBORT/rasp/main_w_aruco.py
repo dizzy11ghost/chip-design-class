@@ -48,7 +48,11 @@ def cargar_rutinas_todas():
         if os.path.exists(ruta):
             with open(ruta, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            rutinas[str(i)] = data.get("rutina", [])
+            puntos = data.get("rutina", [])
+            rutinas[f"{i:02d}"] = puntos
+            print(f"cargada {ruta} con {len(puntos)} puntos")
+        else:
+            print("rutina no encontrada")
     return rutinas
 
 rutinas = cargar_rutinas_todas()
@@ -155,8 +159,8 @@ def detectar_arucos(frame): #vectores de posición de los marcadores
 def carril(posiciones, destino_id, marker_id, frame):
     height, width, _ = frame.shape
     parte = height // 6
-    y_inicio = 4 * parte
-    y_fin    = 5 * parte
+    y_inicio = 1 * parte
+    y_fin    = 2 * parte
     roa = frame[y_inicio:y_fin, :]
 
     #necesitamos detectar si el carrito está dentro de roa constantemente, para eso usamos todo el rectangulo en horizontal que roa crea
@@ -166,9 +170,9 @@ def carril(posiciones, destino_id, marker_id, frame):
         if y_inicio <= cy < y_fin: #si el carrito está dentro de roa, entonces chequeamos en qué parte del carril está para detectar si va por carril o ya llegó a algún parking
             #para el estacio amiento, vamos a partir verticalmente roa en 8 pedazos,
             #el parking b estará en el 8vo final, y el parking u en el 8vo inicial, dejando el espacio del medio para que el carrito pueda entrar y salir de los parkings sin problemas
-            if cx < width * 0.125 and destino_id == ARUCO_BRAZO: #si el carrito está en el 8vo inicial yendo hacia el brazo, entonces llegó al parking del brazo
+            if cx < width * 0.125 and destino_id == ARUCO_USUARIO: #si el carrito está en el 8vo inicial yendo hacia el brazo, entonces llegó al parking del brazo
                 return "LLEGADA"
-            elif cx > width * 0.875 and destino_id == ARUCO_USUARIO:
+            elif cx > width * 0.75 and destino_id == ARUCO_BRAZO:
                 return "LLEGADA"
             else:
                 resultado = "CARRIL" #si el carrito está dentro de roa pero no llegó a ningún parking, entonces sigue en carril
@@ -216,7 +220,7 @@ def calcular_desviacion(pos_real, punto_esperado):
     return max(deltas.values()), deltas
 
 def ejecutar_rutina_dobot(robot, numero): #cuando recibe RL o RE
-    clave = str(numero)
+    clave = f"{numero:02d}"
     if clave not in rutinas:
         print(f"[ERROR] Rutina {clave} no encontrada")
         return False
@@ -242,7 +246,7 @@ def ejecutar_rutina_dobot(robot, numero): #cuando recibe RL o RE
             y = p["y"]
             z = p["z"]
             r = p["r"]
-            suc = p.get("suction", False)
+            suc = p.get("succion", False)
 
             #ahora si, verificamos la posición, si hay desviaciones reposicionamos antes de continuar
             if i > 0:
@@ -435,9 +439,9 @@ while True:
         cv2.rectangle(frame, (0, 0), (w, roi_y), (224, 150, 211), 2)
         cv2.putText(frame, "ROI color", (5, roi_y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
         # ROA (carril) — franja entre h-2*parte y h-1*parte
-        roa_y1 = h - (4 * parte)
-        roa_y2 = h - (5 * parte)
-        cv2.rectangle(frame, (0, roa_y1), (w, roa_y2), (178, 22, ), 2)
+        roa_y1 = 1 * parte
+        roa_y2 = 2 * parte
+        cv2.rectangle(frame, (0, roa_y1), (w, roa_y2), (178, 22, 26), 2)
         cv2.putText(frame, "ROA carril", (5, roa_y1 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
         # Parking Brazo — 8vo izquierdo dentro de ROA
         pb_x2 = int(w * 0.125)
