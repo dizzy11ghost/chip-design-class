@@ -1,3 +1,139 @@
+cargada rutinas/rutina_01.json con 18 puntos
+cargada rutinas/rutina_02.json con 18 puntos
+cargada rutinas/rutina_03.json con 20 puntos
+cargada rutinas/rutina_04.json con 19 puntos
+cargada rutinas/rutina_05.json con 18 puntos
+cargada rutinas/rutina_06.json con 19 puntos
+cargada rutinas/rutina_07.json con 21 puntos
+cargada rutinas/rutina_08.json con 21 puntos
+cargada rutinas/rutina_09.json con 19 puntos
+cargada rutinas/rutina_10.json con 20 puntos
+cargada rutinas/rutina_11.json con 19 puntos
+cargada rutinas/rutina_12.json con 18 puntos
+[ WARN:0@1.421] global cap_gstreamer.cpp:1777 open OpenCV | GStreamer warning: Cannot query video position: status=0, value=-1, duration=-1
+Iniciando hilo Bluetooth...
+Conectando al Dobot Magician...
+¡Conectado!
+Esperando señal BT...
+[BT RX ← MASTER] 'RS'
+Estado: IDLE
+ACOMODAR iniciado
+Color confirmado → AZUL
+[FT] ft2 = 0 (libre)
+[Slot libre → rutina 2
+[BT TX → CARRO] 'KUB'
+[NAV] Start signal enviada: KUB
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[FSM] LLEGADA a USUARIO → RUN
+[BT TX → CARRO] 'KST'
+[DEBUG] rutina_elegida=2 | modo=ACOMODAR
+[DOBOT] Ejecutando rutina 02 (18 puntos)
+Position(x=156.40000915527344, y=12.960001945495605, z=-39.76000213623047, r=4.75)
+Position(x=158.89999389648438, y=11.25, z=-38.459991455078125, r=4.059999942779541)
+  [WARN] No se pudo leer posición actual: 'Pose' object has no attribute 'x'
+Position(x=158.89999389648438, y=11.25, z=-38.459991455078125, r=4.059999942779541)
+  [WARN] No se pudo leer posición actual: 'Pose' object has no attribute 'x'
+Position(x=187.52001953125, y=13.280000686645508, z=131.50999450683594, r=4.059999942779541)
+  [WARN] No se pudo leer posición actual: 'Pose' object has no attribute 'x'
+Position(x=158.489990234375, y=86.0899887084961, z=125.11000061035156, r=28.520000457763672)
+  [WARN] No se pudo leer posición actual: 'Pose' object has no attribute 'x'
+Position(x=156.6000213623047, y=85.23999786376953, z=83.68000030517578, r=28.56999969482422)
+  [WARN] No se pudo leer posición actual: 'Pose' object has no attribute 'x'
+Position(x=156.6000213623047, y=85.23999786376953, z=83.68000030517578, r=28.56999969482422)
+  [WARN] No se pudo leer posición actual: 'Pose' object has no attribute 'x'
+Position(x=156.6000213623047, y=85.23999786376953, z=83.68000030517578, r=28.56999969482422)
+  [WARN] No se pudo leer posición actual: 'Pose' object has no attribute 'x'
+Position(x=156.6000213623047, y=85.23999786376953, z=83.68000030517578, r=28.56999969482422)
+  [WARN] No se pudo leer posición actual: 'Pose' object has no attribute 'x'
+Position(x=157.27999877929688, y=85.33000183105469, z=147.7899932861328, r=28.489999771118164)
+  [WARN] No se pudo leer posición actual: 'Pose' object has no attribute 'x'
+Position(x=82.96000671386719, y=157.74998474121094, z=146.80999755859375, r=62.27000045776367)
+  [WARN] No se pudo leer posición actual: 'Pose' object has no attribute 'x'
+Position(x=-25.339998245239258, y=174.00997924804688, z=145.4600067138672, r=98.29000091552734)
+  [WARN] No se pudo leer posición actual: 'Pose' object has no attribute 'x'
+Position(x=-35.00999069213867, y=147.63002014160156, z=35.25001525878906, r=103.3499984741211)
+  [WARN] No se pudo leer posición actual: 'Pose' object has no attribute 'x'
+Position(x=-35.00999069213867, y=147.63002014160156, z=35.25001525878906, r=103.3499984741211)
+  [WARN] No se pudo leer posición actual: 'Pose' object has no attribute 'x'
+Position(x=-35.00999069213867, y=147.63002014160156, z=35.25001525878906, r=103.3499984741211)
+  [WARN] No se pudo leer posición actual: 'Pose' object has no attribute 'x'
+Position(x=-35.00999069213867, y=147.63002014160156, z=35.25001525878906, r=103.3499984741211)
+  [WARN] No se pudo leer posición actual: 'Pose' object has no attribute 'x'
+Position(x=-35.6400146484375, y=151.1999969482422, z=93.12001037597656, r=103.2699966430664)
+  [WARN] No se pudo leer posición actual: 'Pose' object has no attribute 'x'
+Position(x=83.11998748779297, y=144.489990234375, z=134.74000549316406, r=60.099998474121094)
+  [WARN] No se pudo leer posición actual: 'Pose' object has no attribute 'x'
+Position(x=168.19003295898438, y=22.5100040435791, z=135.47000122070312, r=7.630000114440918)
+[DOBOT] Rutina 02 completada (0 correcciones)
+[BT TX → MASTER] 'ML'
+[BT TX → CARRO] 'KBU'
+[FSM] Paquete depositado → navegando a usuario
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[BT TX → CARRO] 'KCI'
+[NAV] Corrección izquierda enviada: KCI
+[FSM] LLEGADA a BRAZO → IDLE
+[BT TX → CARRO] 'KST'
+
+
+
+
+
+
+
+
+
 ───────────────────────────────────────────────────────
   GRABANDO RUTINA 6
   AMARILLO – ft6
