@@ -223,7 +223,6 @@ def calcular_desviacion(pos_real, punto_esperado):
     return max(deltas.values()), deltas
 
 def ejecutar_rutina_dobot(robot, numero):
-    # Carga fresca en lugar de usar el dict global
     ruta = os.path.join(CARPETA_RUTINAS, f"rutina_{numero:02d}.json")
     if not os.path.exists(ruta):
         print(f"[ERROR] No existe {ruta}")
@@ -241,37 +240,60 @@ def ejecutar_rutina_dobot(robot, numero):
     except Exception:
         pass
 
+    # Mover al punto inicial primero
     try:
-        robot.move_to(puntos[0]["x"], puntos[0]["y"], puntos[0]["z"],
-                      puntos[0].get("r", 0), wait=True, mode=MODO_MOVIMIENTO)
-        time.sleep(0.3)
+        p0 = puntos[0]
+        robot.move_to(p0["x"], p0["y"], p0["z"], p0.get("r", 0), wait=True, mode=MODO_MOVIMIENTO)
+        time.sleep(0.4)
     except Exception as e:
         print(f"[ERROR] No se pudo mover al punto inicial: {e}")
         return False
 
     correcciones = 0
     suc = False
-    try:
-        for i, p in enumerate(puntos):
-            x   = p["x"]
-            y   = p["y"]
-            z   = p["z"]
-            r   = p.get("r", 0)  # ← get con default como el standalone
-            suc = p.get("succion", False)
 
+    try:
+        for i, punto in enumerate(puntos):
+            x   = punto["x"]
+            y   = punto["y"]
+            z   = punto["z"]
+            r   = punto.get("r", 0)
+            suc = punto.get("succion", False)
+
+            # ── Verificar posición y FORZAR llegada ──────────────
             if i > 0:
-                pos_real = obtener_posicion_actual(robot)
-                if pos_real is not None:
+                MAX_INTENTOS = 3
+                for intento in range(MAX_INTENTOS):
+                    pos_real = obtener_posicion_actual(robot)
+                    if pos_real is None:
+                        break
+
                     desviacion, deltas = calcular_desviacion(pos_real, puntos[i - 1])
-                    if desviacion > UMBRAL_DESVIACION_MM:
+
+                    if desviacion <= UMBRAL_DESVIACION_MM:
+                        print(f"  [{i+1}/{len(puntos)}] ✓ pos. correcta "
+                              f"(Δmax:{desviacion:.1f} mm) "
+                              f"→ X:{x} Y:{y} Z:{z} R:{r} Suc:{'SÍ' if suc else 'NO'}")
+                        break  # posición confirmada, continuar
+                    else:
                         correcciones += 1
                         ant = puntos[i - 1]
-                        print(f"[CORRECCIÓN #{correcciones}] punto {i+1} — "
-                              f"Δx:{deltas['x']:.1f} Δy:{deltas['y']:.1f} Δz:{deltas['z']:.1f} mm")
+                        print(f"  [CORRECCIÓN #{correcciones}] intento {intento+1}/{MAX_INTENTOS} "
+                              f"punto {i+1} — Δx:{deltas['x']:.1f} Δy:{deltas['y']:.1f} "
+                              f"Δz:{deltas['z']:.1f} mm — reposicionando...")
+                        # Volver al punto anterior y reintentar
                         robot.move_to(ant["x"], ant["y"], ant["z"],
                                       ant.get("r", 0), wait=True, mode=MODO_MOVIMIENTO)
                         time.sleep(0.3)
+                        # Reintentar llegar al punto destino
+                        robot.move_to(x, y, z, r, wait=True, mode=MODO_MOVIMIENTO)
+                        time.sleep(0.3)
+                else:
+                    print(f"  [WARN] punto {i+1} no convergió tras {MAX_INTENTOS} intentos, continuando...")
+            else:
+                print(f"  [{i+1}/{len(puntos)}] → X:{x} Y:{y} Z:{z} R:{r} Suc:{'SÍ' if suc else 'NO'}")
 
+            # ── Mover al punto destino ────────────────────────────
             robot.move_to(x, y, z, r, wait=True, mode=MODO_MOVIMIENTO)
             robot.suck(suc)
             time.sleep(0.3)
