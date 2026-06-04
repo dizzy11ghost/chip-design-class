@@ -206,13 +206,16 @@ def verificar_rutina_recibir(numero):
     return numero if valor == 1 else None
 
 #funciones de corrección y gestión de mov del Dobot
-def obtener_posicion_actual(robot): #obtenemos coords actuales del Dobot para comparar con la rutina y corregir desviaciones
+def obtener_posicion_actual(robot):
     try:
         pose = robot.get_pose()
+        # pydobotplus regresa (position, joints) — tomar solo el primero
+        if isinstance(pose, (tuple, list)):
+            pose = pose[0]
         return {"x": pose.x, "y": pose.y, "z": pose.z, "r": pose.r}
     except Exception as e:
         print(f"  [WARN] No se pudo leer posición actual: {e}")
-        return None 
+        return None
 
 def calcular_desviacion(pos_real, punto_esperado):
     ejes   = ["x", "y", "z"]
