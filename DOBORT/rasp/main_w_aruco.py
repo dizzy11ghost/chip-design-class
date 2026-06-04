@@ -220,34 +220,40 @@ def calcular_desviacion(pos_real, punto_esperado):
     return max(deltas.values()), deltas
 
 def ejecutar_rutina_dobot(robot, numero):
-    clave = f"{numero:02d}"
-    if clave not in rutinas:
-        print(f"[ERROR] Rutina {clave} no encontrada. Claves disponibles: {list(rutinas.keys())}")
+    # Carga fresca en lugar de usar el dict global
+    ruta = os.path.join(CARPETA_RUTINAS, f"rutina_{numero:02d}.json")
+    if not os.path.exists(ruta):
+        print(f"[ERROR] No existe {ruta}")
         return False
-    puntos = rutinas[clave]
-    print(f"[DOBOT] Ejecutando rutina {clave} ({len(puntos)} puntos)")
+    with open(ruta, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    puntos = data.get("rutina", [])
+    if not puntos:
+        print(f"[ERROR] Rutina {numero:02d} vacía")
+        return False
+
+    print(f"[DOBOT] Ejecutando rutina {numero:02d} ({len(puntos)} puntos)")
     try:
         robot.speed(velocity=VELOCIDAD, acceleration=ACELERACION)
     except Exception:
         pass
 
-    primer = puntos[0]
-    print("Moviendo hacia punto inicial")
     try:
-        robot.move_to(primer["x"], primer["y"], primer["z"], primer["r"], wait=True, mode=MODO_MOVIMIENTO)
+        robot.move_to(puntos[0]["x"], puntos[0]["y"], puntos[0]["z"],
+                      puntos[0].get("r", 0), wait=True, mode=MODO_MOVIMIENTO)
         time.sleep(0.3)
     except Exception as e:
-        print(f"  [ERROR] No se pudo mover a punto inicial: {e}")
+        print(f"[ERROR] No se pudo mover al punto inicial: {e}")
         return False
 
     correcciones = 0
-    suc = False  # ← valor por defecto para el finally
+    suc = False
     try:
         for i, p in enumerate(puntos):
             x   = p["x"]
             y   = p["y"]
             z   = p["z"]
-            r   = p["r"]
+            r   = p.get("r", 0)  # ← get con default como el standalone
             suc = p.get("succion", False)
 
             if i > 0:
@@ -257,25 +263,25 @@ def ejecutar_rutina_dobot(robot, numero):
                     if desviacion > UMBRAL_DESVIACION_MM:
                         correcciones += 1
                         ant = puntos[i - 1]
-                        print(f"[CORRECCIÓN #{correcciones}] punto {i} — Δx:{deltas['x']:.1f} Δy:{deltas['y']:.1f} Δz:{deltas['z']:.1f} mm")
-                        robot.move_to(ant["x"], ant["y"], ant["z"], ant["r"], wait=True, mode=MODO_MOVIMIENTO)
+                        print(f"[CORRECCIÓN #{correcciones}] punto {i+1} — "
+                              f"Δx:{deltas['x']:.1f} Δy:{deltas['y']:.1f} Δz:{deltas['z']:.1f} mm")
+                        robot.move_to(ant["x"], ant["y"], ant["z"],
+                                      ant.get("r", 0), wait=True, mode=MODO_MOVIMIENTO)
                         time.sleep(0.3)
-                    else:
-                        print(f"  [OK] punto {i} — desviación {desviacion:.1f} mm dentro del umbral")
 
             robot.move_to(x, y, z, r, wait=True, mode=MODO_MOVIMIENTO)
             robot.suck(suc)
             time.sleep(0.3)
 
-        print(f"[DOBOT] Rutina {clave} completada ({correcciones} correcciones)")  # ← fuera del for
-        return True  # ← fuera del for
+        print(f"[DOBOT] Rutina {numero:02d} completada ({correcciones} correcciones)")
+        return True
 
     except Exception as e:
-        print(f"  [ERROR] Ejecución interrumpida en punto {i}: {e}")
+        print(f"[ERROR] Interrumpida en punto {i+1}: {e}")
         return False
     finally:
         try:
-            robot.suck(suc=False)  # ← siempre apaga succión al terminar
+            robot.suck(False)
         except Exception:
             pass
             
@@ -407,7 +413,7 @@ while True:
             print(f"[NAV] Corrección derecha enviada: KCD")
 
     elif estado == RUN:
-        print(f"[SYS] Iniciando ejecución → rutina {rutina_elegida} | Modo: {modo_actual}")
+        print(f"[DEBUG] rutina_elegida={rutina_elegida} | modo={modo_actual}")  # ← temporal
         ok = ejecutar_rutina_dobot(robot, rutina_elegida)
         if ok:
             if modo_actual == ACOMODAR:
