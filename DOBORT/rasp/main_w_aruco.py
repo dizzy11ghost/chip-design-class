@@ -219,36 +219,37 @@ def calcular_desviacion(pos_real, punto_esperado):
     deltas = {eje: abs(pos_real[eje] - punto_esperado[eje]) for eje in ejes}
     return max(deltas.values()), deltas
 
-def ejecutar_rutina_dobot(robot, numero): #cuando recibe RL o RE
+def ejecutar_rutina_dobot(robot, numero):
     clave = f"{numero:02d}"
     if clave not in rutinas:
-        print(f"[ERROR] Rutina {clave} no encontrada")
+        print(f"[ERROR] Rutina {clave} no encontrada. Claves disponibles: {list(rutinas.keys())}")
         return False
     puntos = rutinas[clave]
     print(f"[DOBOT] Ejecutando rutina {clave} ({len(puntos)} puntos)")
-    #config velocidad
     try:
         robot.speed(velocity=VELOCIDAD, acceleration=ACELERACION)
     except Exception:
         pass
+
     primer = puntos[0]
-    print(f"moviendo hacia punto inicial")
-    try: 
+    print("Moviendo hacia punto inicial")
+    try:
         robot.move_to(primer["x"], primer["y"], primer["z"], primer["r"], wait=True, mode=MODO_MOVIMIENTO)
-        time.sleep(0.3) 
+        time.sleep(0.3)
     except Exception as e:
         print(f"  [ERROR] No se pudo mover a punto inicial: {e}")
         return False
+
     correcciones = 0
+    suc = False  # ← valor por defecto para el finally
     try:
         for i, p in enumerate(puntos):
-            x = p["x"]
-            y = p["y"]
-            z = p["z"]
-            r = p["r"]
+            x   = p["x"]
+            y   = p["y"]
+            z   = p["z"]
+            r   = p["r"]
             suc = p.get("succion", False)
 
-            #ahora si, verificamos la posición, si hay desviaciones reposicionamos antes de continuar
             if i > 0:
                 pos_real = obtener_posicion_actual(robot)
                 if pos_real is not None:
@@ -256,25 +257,27 @@ def ejecutar_rutina_dobot(robot, numero): #cuando recibe RL o RE
                     if desviacion > UMBRAL_DESVIACION_MM:
                         correcciones += 1
                         ant = puntos[i - 1]
-                        print (f"[CORRECCIÓN #{correcciones}] punto {i} —Δx:{deltas['x']:.1f} Δy:{deltas['y']:.1f} Δz:{deltas['z']:.1f} mm. ")
+                        print(f"[CORRECCIÓN #{correcciones}] punto {i} — Δx:{deltas['x']:.1f} Δy:{deltas['y']:.1f} Δz:{deltas['z']:.1f} mm")
                         robot.move_to(ant["x"], ant["y"], ant["z"], ant["r"], wait=True, mode=MODO_MOVIMIENTO)
                         time.sleep(0.3)
                     else:
                         print(f"  [OK] punto {i} — desviación {desviacion:.1f} mm dentro del umbral")
-                        
-            
+
             robot.move_to(x, y, z, r, wait=True, mode=MODO_MOVIMIENTO)
             robot.suck(suc)
             time.sleep(0.3)
-            print ("Rutina completada adecuadamente")
-        try:
-                robot.suck(suc=False)
-        except Exception:
-            pass
-        return True
+
+        print(f"[DOBOT] Rutina {clave} completada ({correcciones} correcciones)")  # ← fuera del for
+        return True  # ← fuera del for
+
     except Exception as e:
         print(f"  [ERROR] Ejecución interrumpida en punto {i}: {e}")
         return False
+    finally:
+        try:
+            robot.suck(suc=False)  # ← siempre apaga succión al terminar
+        except Exception:
+            pass
             
 #note to self!!! Checar si esta calibración aproximada basta o hay que calibrar con un tablero de ajedrez para obtener coords 3D
 estado = IDLE
