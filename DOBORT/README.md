@@ -1,38 +1,14 @@
-cargada rutinas/rutina_01.json con 18 puntos
-cargada rutinas/rutina_02.json con 18 puntos
-cargada rutinas/rutina_03.json con 20 puntos
-cargada rutinas/rutina_04.json con 19 puntos
-cargada rutinas/rutina_05.json con 18 puntos
-cargada rutinas/rutina_06.json con 19 puntos
-cargada rutinas/rutina_07.json con 21 puntos
-cargada rutinas/rutina_08.json con 21 puntos
-cargada rutinas/rutina_09.json con 19 puntos
-cargada rutinas/rutina_10.json con 20 puntos
-cargada rutinas/rutina_11.json con 19 puntos
-cargada rutinas/rutina_12.json con 18 puntos
-[ WARN:0@1.421] global cap_gstreamer.cpp:1777 open OpenCV | GStreamer warning: Cannot query video position: status=0, value=-1, duration=-1
-Iniciando hilo Bluetooth...
-Conectando al Dobot Magician...
-¡Conectado!
-Esperando señal BT...
-[BT RX ← MASTER] 'RS'
-Estado: IDLE
-ACOMODAR iniciado
-Color confirmado → AZUL
-[FT] ft2 = 0 (libre)
-[Slot libre → rutina 2
-[BT TX → CARRO] 'KUB'
-[NAV] Start signal enviada: KUB
-[BT TX → CARRO] 'KCI'
-[NAV] Corrección izquierda enviada: KCI
-[BT TX → CARRO] 'KCI'
-[NAV] Corrección izquierda enviada: KCI
-[BT TX → CARRO] 'KCI'
-[NAV] Corrección izquierda enviada: KCI
-[BT TX → CARRO] 'KCI'
-[NAV] Corrección izquierda enviada: KCI
-[BT TX → CARRO] 'KCI'
-[NAV] Corrección izquierda enviada: KCI
+from navegacion import arrancar_carrito, verificar_llegada
+
+# Donde antes mandabas bt_send("carro", "KUB"):
+arrancar_carrito(posiciones, ARUCO_BRAZO, bt_send, frame.shape[1], frame.shape[0])
+
+# En estado NAVEGAR, reemplaza carril() con:
+if verificar_llegada(posiciones, ARUCO_CARRO, nav_referencia, w, h):
+    bt_send("carro", "KST")
+    estado = nav_siguiente_estado
+
+
 [BT TX → CARRO] 'KCI'
 [NAV] Corrección izquierda enviada: KCI
 [BT TX → CARRO] 'KCI'
