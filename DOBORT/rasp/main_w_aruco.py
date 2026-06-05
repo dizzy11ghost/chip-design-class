@@ -59,8 +59,14 @@ MARKER_CORNERS_3D = np.array([
 
 # ── Parámetros de control de navegación ──────────────────────────────────────
 #
-# Velocidad base de ambos motores (letra del protocolo K[A-J][A-J]).
-# G = 70%. Ajustar si los motores no tienen suficiente torque para arrancar.
+# Velocidad de arranque — más alta para vencer la inercia estática.
+# I = 90%. El carrito arranca con esto durante ARRANQUE_MS milisegundos,
+# luego la Raspberry empieza a mandar correcciones a VEL_BASE.
+VEL_ARRANQUE  = 'I'   # 90%
+ARRANQUE_MS   = 350   # ms antes de empezar a corregir
+
+# Velocidad base de crucero (letra del protocolo K[A-J][A-J]).
+# G = 70%. Una vez que el carrito está en movimiento, se baja a esta velocidad.
 VEL_BASE      = 'G'   # 70%
 
 # Cuánto se reduce el motor más rápido para corregir.
@@ -387,6 +393,7 @@ nav_siguiente_estado = None
 # Control de corrección en navegación
 ultimo_cmd_nav  = 0.0
 ultimo_cmd_sent = ""
+nav_arranque_ts = 0.0   # timestamp cuando se mandó KUB/KBU
 
 # ── Inicialización ────────────────────────────────────────────────────────────
 print("Iniciando hilos Bluetooth...")
@@ -438,7 +445,10 @@ while True:
                 estado               = NAVEGAR
                 ultimo_cmd_nav       = 0.0
                 ultimo_cmd_sent      = ""
-                bt_send("carro", "KUB")   # arranca a velocidad base
+                nav_arranque_ts      = time.time()
+                bt_send("carro", "KUB")
+                # Arranca a velocidad alta para vencer inercia estática
+                bt_send("carro", f"K{VEL_ARRANQUE}{VEL_ARRANQUE}")
                 print(f"[FSM] NAVEGAR → RUN rutina {numero}")
             else:
                 bt_send("master", 'M', 'N')
@@ -471,7 +481,9 @@ while True:
             estado               = NAVEGAR
             ultimo_cmd_nav       = 0.0
             ultimo_cmd_sent      = ""
-            bt_send("carro", "KUB")   # arranca a velocidad base
+            nav_arranque_ts      = time.time()
+            bt_send("carro", "KUB")
+            bt_send("carro", f"K{VEL_ARRANQUE}{VEL_ARRANQUE}")
         else:
             print("Sin espacio → ME al MASTER")
             bt_send("master", 'M', 'E')
@@ -489,15 +501,20 @@ while True:
 
         # ── Corrección de yaw en tiempo real ──────────────────────────────
         elif ARUCO_CARRO in corners_dict:
-            yaw = _estimar_yaw(corners_dict[ARUCO_CARRO])
-            if yaw is not None:
-                cmd = _calcular_cmd_pwm(yaw)
-                ahora = time.time()
-                # Manda corrección solo si cambió el comando o pasó el throttle
-                if cmd != ultimo_cmd_sent or (ahora - ultimo_cmd_nav) > THROTTLE_S:
-                    bt_send("carro", cmd)
-                    ultimo_cmd_nav  = ahora
-                    ultimo_cmd_sent = cmd
+            ahora = time.time()
+            # Esperar ARRANQUE_MS antes de empezar a corregir — deja que el
+            # carrito venza la inercia estática con velocidad de arranque alta
+            if (ahora - nav_arranque_ts) * 1000 < ARRANQUE_MS:
+                pass   # en fase de arranque, no corregir todavía
+            else:
+                yaw = _estimar_yaw(corners_dict[ARUCO_CARRO])
+                if yaw is not None:
+                    cmd = _calcular_cmd_pwm(yaw)
+                    # Manda corrección solo si cambió el comando o pasó el throttle
+                    if cmd != ultimo_cmd_sent or (ahora - ultimo_cmd_nav) > THROTTLE_S:
+                        bt_send("carro", cmd)
+                        ultimo_cmd_nav  = ahora
+                        ultimo_cmd_sent = cmd
 
     elif estado == RUN:
         print(f"[DEBUG] rutina_elegida={rutina_elegida} | modo={modo_actual}")
@@ -510,7 +527,9 @@ while True:
                 estado               = NAVEGAR
                 ultimo_cmd_nav       = 0.0
                 ultimo_cmd_sent      = ""
+                nav_arranque_ts      = time.time()
                 bt_send("carro", "KBU")
+                bt_send("carro", f"K{VEL_ARRANQUE}{VEL_ARRANQUE}")
                 print("[FSM] Paquete depositado → navegando a usuario")
             elif modo_actual == RECIBIR:
                 bt_send("master", 'M', 'R')
@@ -519,7 +538,9 @@ while True:
                 estado               = NAVEGAR
                 ultimo_cmd_nav       = 0.0
                 ultimo_cmd_sent      = ""
+                nav_arranque_ts      = time.time()
                 bt_send("carro", "KBU")
+                bt_send("carro", f"K{VEL_ARRANQUE}{VEL_ARRANQUE}")
                 print("[FSM] Paquete tomado → navegando a usuario")
         else:
             estado = IDLE
