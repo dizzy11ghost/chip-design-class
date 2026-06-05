@@ -8,88 +8,133 @@ import serial
 import threading
 import queue
 import os
+import math
 
-#conf general ----------------------------------------------------
-PORT = "/dev/ttyS0" 
+# ── Configuración general ─────────────────────────────────────────────────────
+PORT = "/dev/ttyS0"
 GPIO.setmode(GPIO.BCM)
 
-# Estados ------------------------------------------------------
+# ── Estados ───────────────────────────────────────────────────────────────────
 IDLE     = "IDLE"
 DETECTAR = "DETECTAR"
 DECIDIR  = "DECIDIR"
 NAVEGAR  = "NAVEGAR"
 RUN      = "RUN"
-#modos posibles
 ACOMODAR = "ACOMODAR"
 RECIBIR  = "RECIBIR"
 
-#aruco config
+# ── ArUco config ──────────────────────────────────────────────────────────────
 aruco_dict   = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_ARUCO_ORIGINAL)
 aruco_params = cv2.aruco.DetectorParameters()
 detector     = cv2.aruco.ArucoDetector(aruco_dict, aruco_params)
-marker_length   = 0.06    # metros (6 cm)
-pixel_size      = 1.12e-6 # metros
-focal_length_px = 500     # en pixeles
+marker_length   = 0.06
+pixel_size      = 1.12e-6
+focal_length_px = 500
 focal_length_m  = focal_length_px * pixel_size
 
-# IDs de marcadores ArUco y umbral de llegada ------------------
 ARUCO_CARRO   = 25
 ARUCO_BRAZO   = 50
 ARUCO_USUARIO = 10
-DISTANCIA_LLEGADA_CM = 2.0  # cm — ajustar según pruebas
 
-# Rutinas del dobot ---------------------------------------------
+# ── Navegación feedforward — parámetros ───────────────────────────────────────
+#
+# Tamaño físico del ArUco del carrito (metros).
+# Mide de borde a borde del cuadro negro exterior del marcador impreso.
+MARKER_SIZE_M = 0.06
+
+# Resolución de la cámara — debe coincidir con lo que entrega VideoCapture.
+FRAME_W = 640
+FRAME_H = 480
+
+# Matriz de cámara aproximada.
+# Sin calibrar con tablero: focal ≈ max(w,h) funciona bien para ángulos <30°.
+_f  = max(FRAME_W, FRAME_H)
+CAMERA_MATRIX = np.array([
+    [_f,  0,  FRAME_W / 2],
+    [0,   _f, FRAME_H / 2],
+    [0,   0,  1           ],
+], dtype=np.float64)
+DIST_COEFFS = np.zeros((4, 1), dtype=np.float64)
+
+# Esquinas del marcador en su sistema de coordenadas local (3D).
+# Origen en el centro, Z apunta hacia la cámara.
+# Orden: top-left, top-right, bottom-right, bottom-left (igual que OpenCV).
+_hm = MARKER_SIZE_M / 2
+MARKER_CORNERS_3D = np.array([
+    [-_hm,  _hm, 0],
+    [ _hm,  _hm, 0],
+    [ _hm, -_hm, 0],
+    [-_hm, -_hm, 0],
+], dtype=np.float64)
+
+# Zona muerta: si |yaw| < este valor se considera "recto" → KAA
+ANGULO_MUERTO_DEG = 6.0
+
+# Tabla ángulo → comando de compensación PWM.
+# Formato: (umbral_superior_deg, cmd_avanzar, cmd_reversa)
+# Se evalúa de arriba hacia abajo; el primer umbral que supere el yaw gana.
+#
+# CÓMO AJUSTAR UMBRALES:
+#   Corre el carrito con KAA y observa qué yaw reporta la consola cuando
+#   llega torcido. Si llega 8° hacia la derecha con KAA, el umbral de KAB
+#   debería estar en ~5° para que lo atrape antes.
+TABLA_COMANDOS = [
+    (-25.0,           "KBC", "KBC"),
+    (-15.0,           "KBB", "KBB"),
+    (-ANGULO_MUERTO_DEG, "KBA", "KBA"),
+    ( ANGULO_MUERTO_DEG, "KAA", "KAA"),
+    ( 15.0,           "KAB", "KAB"),
+    ( 25.0,           "KAC", "KAC"),
+    ( math.inf,       "KAD", "KAD"),
+]
+
+# Fracción del ancho del frame que define la zona de parking
+PARKING_FRACCION = 0.125
+
+# ── Rutinas del Dobot ─────────────────────────────────────────────────────────
 CARPETA_RUTINAS = "rutinas"
 
 def cargar_rutinas_todas():
     rutinas = {}
-    for i in range(1, 13):  # rutina_01 a rutina_12
+    for i in range(1, 13):
         ruta = os.path.join(CARPETA_RUTINAS, f"rutina_{i:02d}.json")
         if os.path.exists(ruta):
             with open(ruta, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            puntos = data.get("rutina", [])
-            rutinas[f"{i:02d}"] = puntos
-            print(f"cargada {ruta} con {len(puntos)} puntos")
+            rutinas[f"{i:02d}"] = data.get("rutina", [])
+            print(f"cargada {ruta} con {len(rutinas[f'{i:02d}'])} puntos")
         else:
-            print("rutina no encontrada")
+            print(f"rutina no encontrada: {ruta}")
     return rutinas
 
 rutinas = cargar_rutinas_todas()
 
-#config dobot -----------------------------------------------
-VELOCIDAD = 100 
-ACELERACION = 100
-MODO_MOVIMIENTO = 0X01 #movimiento por joints
-UMBRAL_DESVIACION_MM = 2.0 #calcular desviaciones entre calibración y ejecución actual
+# ── Config Dobot ──────────────────────────────────────────────────────────────
+VELOCIDAD           = 100
+ACELERACION         = 100
+MODO_MOVIMIENTO     = 0x01
+UMBRAL_DESVIACION_MM = 2.0
 
-# configuración de pines GPIO ----------------------------------
-PINES_FT = { "ft1": 17, "ft4": 22, "ft3": 4, "ft2": 24, "ft6": 25, "ft5": 27}
+# ── GPIO (finales de carrera) ─────────────────────────────────────────────────
+PINES_FT = {"ft1": 17, "ft4": 22, "ft3": 4, "ft2": 24, "ft6": 25, "ft5": 27}
 for pin in PINES_FT.values():
     GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
-# Bluetooth ----------------------------------------------------
-ser_master = serial.Serial('/dev/rfcomm1', 9600, timeout=0.1)  # Master (comm1)
-ser_carro  = serial.Serial('/dev/rfcomm0', 9600, timeout=0.1)  # Carro  (comm0)
+# ── Bluetooth ─────────────────────────────────────────────────────────────────
+ser_master = serial.Serial('/dev/rfcomm1', 9600, timeout=0.1)
+ser_carro  = serial.Serial('/dev/rfcomm0', 9600, timeout=0.1)
 
 bt_queue_master = queue.Queue()
 bt_queue_carro  = queue.Queue()
 
-"""
-Señales que mandamos: 
-al carro: KBU (distancia brazo usuario), KUB(distancia usuario brazo), distancia (3 valores cm)
-master: MS (casilla ocupada), MN (casilla vacía), ME (sin espacio), ML (paquete depositado), MR(paquete mandado)
-"""
 def bt_send(destino, *args):
     msg = ''.join(map(str, args))
     if destino == "master":
-        ser_master.write((msg).encode())
+        ser_master.write(msg.encode())
         print(f"[BT TX → MASTER] '{msg}'")
     elif destino == "carro":
-        ser_carro.write((msg).encode())
+        ser_carro.write(msg.encode())
         print(f"[BT TX → CARRO] '{msg}'")
-
-#Señales que recibimos (sólo de Master): RS (start modo 1), R1-R6 (modo 2, posicion del slot)
 
 def receive_loop(ser, bt_queue, nombre):
     while True:
@@ -99,20 +144,19 @@ def receive_loop(ser, bt_queue, nombre):
         dato = ser.read(1)
         if not dato:
             continue
-        dest  = dest.decode('ascii', errors='ignore')
-        dato  = dato.decode('ascii', errors='ignore')
-        señal = dest + dato
+        señal = dest.decode('ascii', errors='ignore') + dato.decode('ascii', errors='ignore')
         print(f"[BT RX ← {nombre}] '{señal}'")
         bt_queue.put(señal)
 
-#Cámara ------------------------------------------------------
+# ── Cámara ────────────────────────────────────────────────────────────────────
 cap = cv2.VideoCapture(0)
 lower_red1   = np.array([0,   100, 100]); upper_red1   = np.array([10,  255, 255])
 lower_red2   = np.array([170, 100, 100]); upper_red2   = np.array([180, 255, 255])
 lower_blue   = np.array([100, 100, 100]); upper_blue   = np.array([140, 255, 255])
 lower_yellow = np.array([10,  100, 100]); upper_yellow = np.array([25,  255, 255])
 
-# Funciones auxiliares ------------------------------------------------------
+# ── Funciones auxiliares ──────────────────────────────────────────────────────
+
 def leer_ft(nombre):
     return GPIO.input(PINES_FT[nombre]) if nombre in PINES_FT else 0
 
@@ -120,7 +164,8 @@ def detectar_color(frame):
     height, width, _ = frame.shape
     roi = frame[:int(height * 0.5), :]
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-    mask_red    = (cv2.inRange(hsv, lower_red1, upper_red1) | cv2.inRange(hsv, lower_red2, upper_red2))
+    mask_red    = (cv2.inRange(hsv, lower_red1, upper_red1) |
+                   cv2.inRange(hsv, lower_red2, upper_red2))
     mask_blue   = cv2.inRange(hsv, lower_blue,   upper_blue)
     mask_yellow = cv2.inRange(hsv, lower_yellow, upper_yellow)
     areas = {
@@ -133,83 +178,121 @@ def detectar_color(frame):
         return dominante, roi
     return "NONE", roi
 
-def detectar_arucos(frame): #vectores de posición de los marcadores
-    corners, ids, _ = detector.detectMarkers(frame)
-    posiciones = {} #diccionario para guardar posiciones de cada ID
-    if ids is None:          # FIX: antes retornaba aquí siempre, nunca procesaba markers
-        return posiciones, frame
-    for i, marker_id in enumerate(ids.flatten()): #enumerate para obtener índice a través de la iteración, flatten para convertir ids a 1D
-        pts      = corners[i].reshape((4, 2)) #obtenemos las esquinas del marcador
-        width_px = np.linalg.norm(pts[1] - pts[0]) #calculamos el ancho en pixeles
-        width_m  = width_px * pixel_size #convertimos a metros
-        distance_z = (focal_length_m * marker_length) / width_m #calculamos la distancia al marcador en eje Z
-        cx = int(np.mean(pts[:, 0])) #saca el promedio de las coordenadas X de las esquinas para obtener el centro del marcador en X
-        cy = int(np.mean(pts[:, 1]))
-        posiciones[marker_id] = (cx, cy, distance_z) #vector diccionario que según el ID guarda posiciones y profundidad
+def detectar_arucos(frame):
+    """
+    Retorna (posiciones, corners_dict, frame).
 
-        #dibujamos para UI
+    posiciones  : {id: (cx, cy, distance_z)}  — igual que antes
+    corners_dict: {id: np.ndarray (4,2)}       — esquinas en píxeles para solvePnP
+    """
+    corners, ids, _ = detector.detectMarkers(frame)
+    posiciones   = {}
+    corners_dict = {}
+    if ids is None:
+        return posiciones, corners_dict, frame
+    for i, marker_id in enumerate(ids.flatten()):
+        pts      = corners[i].reshape((4, 2))
+        width_px = np.linalg.norm(pts[1] - pts[0])
+        width_m  = width_px * pixel_size
+        distance_z = (focal_length_m * marker_length) / width_m if width_m > 0 else 0
+        cx = int(np.mean(pts[:, 0]))
+        cy = int(np.mean(pts[:, 1]))
+        posiciones[marker_id]   = (cx, cy, distance_z)
+        corners_dict[marker_id] = pts                   # ← nuevo
+
         pts_int = pts.astype(int)
         cv2.polylines(frame, [pts_int], True, (0, 255, 0), 2)
-        cv2.putText(frame, f"ID:{marker_id}m",
-                (pts_int[0][0], pts_int[0][1] - 10),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (25,255,255), 1)
+        cv2.putText(frame, f"ID:{marker_id}",
+                    (pts_int[0][0], pts_int[0][1] - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (25, 255, 255), 1)
+    return posiciones, corners_dict, frame
 
-    return posiciones, frame
+# ── Navegación feedforward ────────────────────────────────────────────────────
 
-def carril(posiciones, destino_id, marker_id, frame):
-    height, width, _ = frame.shape
-    parte = height // 6
-    y_inicio = 1 * parte
-    y_fin    = 2 * parte
-    roa = frame[y_inicio:y_fin, :]
+def _estimar_yaw(corners_2d: np.ndarray):
+    """
+    Estima el yaw del ArUco usando solvePnP y las esquinas en píxeles.
 
-    #necesitamos detectar si el carrito está dentro de roa constantemente, para eso usamos todo el rectangulo en horizontal que roa crea
-    #necesitamos tmb detectar si el carrito llega a un estacionamiento de los dos que tiene disponibles, para eso checanos si el aruco del carrito esta en alguna de estas regiones
-    if marker_id in posiciones:
-        cx, cy, _ = posiciones[marker_id] #obtenemos el centro del marcador del carrito para saber dónde está dentro de roa, y así detectar si está en carril o en algún parking
-        if y_inicio <= cy < y_fin: #si el carrito está dentro de roa, entonces chequeamos en qué parte del carril está para detectar si va por carril o ya llegó a algún parking
-            #para el estacio amiento, vamos a partir verticalmente roa en 8 pedazos,
-            #el parking b estará en el 8vo final, y el parking u en el 8vo inicial, dejando el espacio del medio para que el carrito pueda entrar y salir de los parkings sin problemas
-            if cx < width * 0.125 and destino_id == ARUCO_USUARIO: #si el carrito está en el 8vo inicial yendo hacia el brazo, entonces llegó al parking del brazo
-                return "LLEGADA"
-            elif cx > width * 0.75 and destino_id == ARUCO_BRAZO:
-                return "LLEGADA"
-            else:
-                resultado = "CARRIL" #si el carrito está dentro de roa pero no llegó a ningún parking, entonces sigue en carril
-        elif cy < y_inicio: #si el carrito esta "abajo" de roa
-            return "KCI" #mandaremos señal de corregir derecho para corregir la trayectoria del carrito hacia el carril
-        elif cy >= y_fin: #si el carrito esta "arriba" de roa
-            return "KCD" #mandaremos señal de corregir izquierdo para corregir la trayectoria del carrito hacia el carril
-        else:
-            return None
+    Retorna yaw en grados, o None si solvePnP falla.
 
-def decidir_rutina_acomodar(color):
-    slots = {
-        "ROJO":     [("ft1", 7),  ("ft4", 10)],
-        "AZUL":     [("ft2", 8),  ("ft5", 11)],
-        "AMARILLO": [("ft3", 9),  ("ft6", 12)],
-    }
-    for ft_nombre, numero_rutina in slots[color]:
-        valor = leer_ft(ft_nombre)
-        print(f"[FT] {ft_nombre} = {valor} ({'libre' if valor == 0 else 'ocupado'})")
-        if valor == 0:
-            return numero_rutina
-    return None
+    Yaw ≈ 0°  → marcador mirando de frente a la cámara (carrito recto).
+    Yaw > 0°  → girado a la derecha.
+    Yaw < 0°  → girado a la izquierda.
 
-def verificar_rutina_recibir(numero):
-    ft_por_rutina = {1:"ft1", 2:"ft2", 3:"ft3", 4:"ft4", 5:"ft5", 6:"ft6"}
-    ft_nombre = ft_por_rutina.get(numero)
-    if ft_nombre is None:
+    Si el ArUco está montado mirando hacia arriba (plano horizontal) el yaw
+    corresponde directamente al ángulo de rumbo del carrito. Si las correcciones
+    van al revés, negarlo aquí: return -yaw
+    """
+    ok, rvec, _ = cv2.solvePnP(
+        MARKER_CORNERS_3D,
+        corners_2d.reshape((4, 1, 2)),
+        CAMERA_MATRIX,
+        DIST_COEFFS,
+        flags=cv2.SOLVEPNP_IPPE_SQUARE,
+    )
+    if not ok:
         return None
-    valor = leer_ft(ft_nombre)
-    print(f"[FT] {ft_nombre} = {valor} ({'ocupado' if valor == 1 else 'vacío'})")
-    return numero if valor == 1 else None
+    R, _ = cv2.Rodrigues(rvec)
+    sy = math.sqrt(R[0, 0]**2 + R[1, 0]**2)
+    yaw = math.degrees(math.atan2(R[1, 0], R[0, 0])) if sy > 1e-6 else 0.0
+    return yaw
 
-#funciones de corrección y gestión de mov del Dobot
+def _elegir_comando(yaw: float, es_avanzar: bool) -> str:
+    for umbral, cmd_av, cmd_rev in TABLA_COMANDOS:
+        if yaw < umbral:
+            return cmd_av if es_avanzar else cmd_rev
+    return "KAA"
+
+def verificar_llegada(posiciones: dict, id_carro: int, id_destino: int,
+                       frame_w: int, frame_h: int) -> bool:
+    """Retorna True cuando el carrito entra en la zona de parking del destino."""
+    if id_carro not in posiciones:
+        return False
+    cx, cy, _ = posiciones[id_carro]
+    parte  = frame_h // 6
+    roa_y1 = 1 * parte
+    roa_y2 = 2 * parte
+    if not (roa_y1 <= cy < roa_y2):
+        return False
+    if id_destino == ARUCO_BRAZO:
+        return cx < frame_w * PARKING_FRACCION
+    else:
+        return cx > frame_w * (1.0 - PARKING_FRACCION)
+
+def arrancar_carrito(corners_dict: dict, destino_id: int, frame_w: int, frame_h: int) -> bool:
+    """
+    Estima el yaw del carrito con solvePnP, manda el offset de PWM y luego el arranque.
+
+    Retorna True si se enviaron los comandos, False si el ArUco no era visible.
+    """
+    es_avanzar = (destino_id == ARUCO_BRAZO)
+
+    if ARUCO_CARRO not in corners_dict:
+        print("[NAV] ArUco del carrito no visible — no se puede estimar yaw")
+        return False
+
+    yaw = _estimar_yaw(corners_dict[ARUCO_CARRO])
+    if yaw is None:
+        print("[NAV] solvePnP falló — usando KAA por defecto")
+        yaw = 0.0
+
+    cmd_offset   = _elegir_comando(yaw, es_avanzar)
+    cmd_arranque = "KUB" if es_avanzar else "KBU"
+
+    print(f"[NAV] Yaw estimado: {yaw:.1f}° → offset: {cmd_offset} → arranque: {cmd_arranque}")
+
+    # 1. Offset de PWM (KL25 lo guarda internamente, no arranca todavía)
+    bt_send("carro", cmd_offset)
+    time.sleep(0.05)   # gap mínimo para que el KL25 procese antes del arranque
+    # 2. Arranque con PWM ya compensado
+    bt_send("carro", cmd_arranque)
+    return True
+
+# ── Funciones Dobot ───────────────────────────────────────────────────────────
+
 def obtener_posicion_actual(robot):
     try:
         pose = robot.get_pose()
-        # pydobotplus regresa (position, joints) — tomar solo el primero
         if isinstance(pose, (tuple, list)):
             pose = pose[0]
         return {"x": pose.x, "y": pose.y, "z": pose.z, "r": pose.r}
@@ -240,67 +323,53 @@ def ejecutar_rutina_dobot(robot, numero):
     except Exception:
         pass
 
-    # Mover al punto inicial primero
     try:
         p0 = puntos[0]
-        robot.move_to(p0["x"], p0["y"], p0["z"], p0.get("r", 0), wait=True, mode=MODO_MOVIMIENTO)
+        robot.move_to(p0["x"], p0["y"], p0["z"], p0.get("r", 0),
+                      wait=True, mode=MODO_MOVIMIENTO)
         time.sleep(0.4)
     except Exception as e:
         print(f"[ERROR] No se pudo mover al punto inicial: {e}")
         return False
 
     correcciones = 0
-    suc = False
-
     try:
         for i, punto in enumerate(puntos):
-            x   = punto["x"]
-            y   = punto["y"]
-            z   = punto["z"]
-            r   = punto.get("r", 0)
+            x   = punto["x"];  y = punto["y"]
+            z   = punto["z"];  r = punto.get("r", 0)
             suc = punto.get("succion", False)
 
-            # ── Verificar posición y FORZAR llegada ──────────────
             if i > 0:
-                MAX_INTENTOS = 3
-                for intento in range(MAX_INTENTOS):
+                for intento in range(3):
                     pos_real = obtener_posicion_actual(robot)
                     if pos_real is None:
                         break
-
                     desviacion, deltas = calcular_desviacion(pos_real, puntos[i - 1])
-
                     if desviacion <= UMBRAL_DESVIACION_MM:
-                        print(f"  [{i+1}/{len(puntos)}] ✓ pos. correcta "
-                              f"(Δmax:{desviacion:.1f} mm) "
+                        print(f"  [{i+1}/{len(puntos)}] ✓ (Δmax:{desviacion:.1f}mm) "
                               f"→ X:{x} Y:{y} Z:{z} R:{r} Suc:{'SÍ' if suc else 'NO'}")
-                        break  # posición confirmada, continuar
-                    else:
-                        correcciones += 1
-                        ant = puntos[i - 1]
-                        print(f"  [CORRECCIÓN #{correcciones}] intento {intento+1}/{MAX_INTENTOS} "
-                              f"punto {i+1} — Δx:{deltas['x']:.1f} Δy:{deltas['y']:.1f} "
-                              f"Δz:{deltas['z']:.1f} mm — reposicionando...")
-                        # Volver al punto anterior y reintentar
-                        robot.move_to(ant["x"], ant["y"], ant["z"],
-                                      ant.get("r", 0), wait=True, mode=MODO_MOVIMIENTO)
-                        time.sleep(0.3)
-                        # Reintentar llegar al punto destino
-                        robot.move_to(x, y, z, r, wait=True, mode=MODO_MOVIMIENTO)
-                        time.sleep(0.3)
+                        break
+                    correcciones += 1
+                    ant = puntos[i - 1]
+                    print(f"  [CORRECCIÓN #{correcciones}] intento {intento+1}/3 "
+                          f"Δx:{deltas['x']:.1f} Δy:{deltas['y']:.1f} Δz:{deltas['z']:.1f}mm")
+                    robot.move_to(ant["x"], ant["y"], ant["z"],
+                                  ant.get("r", 0), wait=True, mode=MODO_MOVIMIENTO)
+                    time.sleep(0.3)
+                    robot.move_to(x, y, z, r, wait=True, mode=MODO_MOVIMIENTO)
+                    time.sleep(0.3)
                 else:
-                    print(f"  [WARN] punto {i+1} no convergió tras {MAX_INTENTOS} intentos, continuando...")
+                    print(f"  [WARN] punto {i+1} no convergió, continuando...")
             else:
-                print(f"  [{i+1}/{len(puntos)}] → X:{x} Y:{y} Z:{z} R:{r} Suc:{'SÍ' if suc else 'NO'}")
+                print(f"  [{i+1}/{len(puntos)}] → X:{x} Y:{y} Z:{z} R:{r} "
+                      f"Suc:{'SÍ' if suc else 'NO'}")
 
-            # ── Mover al punto destino ────────────────────────────
             robot.move_to(x, y, z, r, wait=True, mode=MODO_MOVIMIENTO)
             robot.suck(suc)
             time.sleep(0.3)
 
         print(f"[DOBOT] Rutina {numero:02d} completada ({correcciones} correcciones)")
         return True
-
     except Exception as e:
         print(f"[ERROR] Interrumpida en punto {i+1}: {e}")
         return False
@@ -309,64 +378,79 @@ def ejecutar_rutina_dobot(robot, numero):
             robot.suck(False)
         except Exception:
             pass
-            
-#note to self!!! Checar si esta calibración aproximada basta o hay que calibrar con un tablero de ajedrez para obtener coords 3D
-estado = IDLE
-modo_actual = None   # "ACOMODAR" | "RECIBIR"
-color_paquete = None
+
+def decidir_rutina_acomodar(color):
+    slots = {
+        "ROJO":     [("ft1", 7),  ("ft4", 10)],
+        "AZUL":     [("ft2", 8),  ("ft5", 11)],
+        "AMARILLO": [("ft3", 9),  ("ft6", 12)],
+    }
+    for ft_nombre, numero_rutina in slots[color]:
+        valor = leer_ft(ft_nombre)
+        print(f"[FT] {ft_nombre} = {valor} ({'libre' if valor == 0 else 'ocupado'})")
+        if valor == 0:
+            return numero_rutina
+    return None
+
+def verificar_rutina_recibir(numero):
+    ft_por_rutina = {1:"ft1", 2:"ft2", 3:"ft3", 4:"ft4", 5:"ft5", 6:"ft6"}
+    ft_nombre = ft_por_rutina.get(numero)
+    if ft_nombre is None:
+        return None
+    valor = leer_ft(ft_nombre)
+    print(f"[FT] {ft_nombre} = {valor} ({'ocupado' if valor == 1 else 'vacío'})")
+    return numero if valor == 1 else None
+
+# ── Variables de estado ───────────────────────────────────────────────────────
+estado         = IDLE
+modo_actual    = None
+color_paquete  = None
 rutina_elegida = None
 FRAMES_THRESHOLD = 20
-contador_conf = 0
+contador_conf  = 0
 color_candidato = None
 
-#navegación
-nav_origen = None
-nav_referencia = None
-nav_signal = None
+nav_origen          = None
+nav_referencia      = None
+nav_signal          = None
 nav_siguiente_estado = None
 
-# Inicialización -------------------------------------------------------------
-print("Iniciando hilo Bluetooth...")
-#threading
+# ── Inicialización ────────────────────────────────────────────────────────────
+print("Iniciando hilos Bluetooth...")
 threading.Thread(target=receive_loop,
-                 args=(ser_master, bt_queue_master, "MASTER"),
-                 daemon=True).start()
+                 args=(ser_master, bt_queue_master, "MASTER"), daemon=True).start()
+threading.Thread(target=receive_loop,
+                 args=(ser_carro,  bt_queue_carro,  "CARRO"),  daemon=True).start()
 
-threading.Thread(target=receive_loop,
-                 args=(ser_carro,  bt_queue_carro,  "CARRO"),
-                 daemon=True).start()
 print("Conectando al Dobot Magician...")
 robot = Dobot(port=PORT)
 print("¡Conectado!")
 print("Esperando señal BT...")
 
-# MAIN LOOP ----------------------------------------------------------------------------
-roi = None
-posiciones = {}  # FIX: inicializar en scope del loop principal
+# ── Main loop ─────────────────────────────────────────────────────────────────
+roi          = None
+posiciones   = {}
+corners_dict = {}   # esquinas ArUco para solvePnP
 
 while True:
-
     ret, frame = cap.read()
-    # Leer cámara (siempre, para mantener el buffer fresco)
     if ret and frame is not None:
-        color_detectado, roi = detectar_color(frame)
-        posiciones, frame    = detectar_arucos(frame)  # FIX: actualizar posiciones cada frame
+        color_detectado, roi              = detectar_color(frame)
+        posiciones, corners_dict, frame   = detectar_arucos(frame)
     else:
         time.sleep(0.05)
         continue
 
-    # Señales BT -------------------------------------------------------------
+    # ── Señales BT ────────────────────────────────────────────────────────────
     while not bt_queue_master.empty():
         señal = bt_queue_master.get()
         print(f"Estado: {estado}")
 
-        #START ACOMODAR 
-        if señal == "RS" and estado == IDLE: #RStart modo acomodar
+        if señal == "RS" and estado == IDLE:
             modo_actual = ACOMODAR
             estado      = DETECTAR
             print("ACOMODAR iniciado")
 
-        #RECIBIR SLOT
         elif señal in ("R1","R2","R3","R4","R5","R6"):
             if estado != IDLE:
                 continue
@@ -374,26 +458,24 @@ while True:
             rutina_valida = verificar_rutina_recibir(numero)
             if rutina_valida is not None:
                 bt_send("master", 'M', 'S')
-                rutina_elegida = numero
-                modo_actual    = RECIBIR
-                # FIX: modo RECIBIR navega carro→brazo primero, igual que ACOMODAR
-                #calculamos cuando haya una distancia de 78cm entre el punto de inicio y el ArUco del carrito 
-                nav_origen           = ARUCO_CARRO
-                nav_referencia          = ARUCO_USUARIO
-                nav_signal           = "KUB"
+                rutina_elegida       = numero
+                modo_actual          = RECIBIR
+                nav_referencia       = ARUCO_BRAZO
                 nav_siguiente_estado = RUN
                 estado               = NAVEGAR
-                bt_send("carro", 'K', 'U', 'B')
+                # ← arranque feedforward: calcula yaw y manda offset+KUB
+                arrancar_carrito(corners_dict, ARUCO_BRAZO,
+                                 frame.shape[1], frame.shape[0])
                 print(f"[FSM] NAVEGAR → RUN rutina {numero}")
             else:
                 bt_send("master", 'M', 'N')
                 print(f"casilla {numero} vacía, no se puede recibir ahí")
 
-    # Máquina de estados ------------------------------------------------------
-    if estado == DETECTAR: #sólo llamamos a detectando cuando el modo es acomodar, porque ahí es cuando la cámara tiene que detectar el color del paquete para decidir la rutina
+    # ── Máquina de estados ────────────────────────────────────────────────────
+    if estado == DETECTAR:
         if color_detectado != "NONE":
             if color_detectado == color_candidato:
-                contador_conf += 1 #contador_conf es para el threshold de frames para confirmar el color
+                contador_conf += 1
             else:
                 color_candidato = color_detectado
                 contador_conf   = 1
@@ -407,95 +489,99 @@ while True:
             color_candidato = None
             contador_conf   = 0
 
-    elif estado == DECIDIR: #decide qué rutina usar para acomodar, dependiendo del color detectado
+    elif estado == DECIDIR:
         rutina_elegida = decidir_rutina_acomodar(color_paquete)
         if rutina_elegida is not None:
-            print(f"[Slot libre → rutina {rutina_elegida}")
-            nav_origen           = ARUCO_CARRO
-            nav_referencia         = ARUCO_USUARIO
-            nav_signal           = "KUB"
+            print(f"[Slot libre → rutina {rutina_elegida}]")
+            nav_referencia       = ARUCO_BRAZO
             nav_siguiente_estado = RUN
             estado               = NAVEGAR
-            bt_send("carro", nav_signal)  # ← start signal ANTES de entrar a NAVEGAR
-            print(f"[NAV] Start signal enviada: {nav_signal}")
+            # ← arranque feedforward
+            arrancar_carrito(corners_dict, ARUCO_BRAZO,
+                             frame.shape[1], frame.shape[0])
         else:
             print("Sin espacio → ME al MASTER")
             bt_send("master", 'M', 'E')
             estado = IDLE
 
-    elif estado == NAVEGAR: #NAVEGAAAAAAAR --------------------------------------------------------
-        destino = "BRAZO" if nav_referencia == ARUCO_BRAZO else "USUARIO"
-        resultado = carril(posiciones, nav_referencia, ARUCO_CARRO, frame)
-        if resultado == "LLEGADA":
-            estado = nav_siguiente_estado
-            print(f"[FSM] LLEGADA a {destino} → {estado}")
+    elif estado == NAVEGAR:
+        h, w, _ = frame.shape
+        if verificar_llegada(posiciones, ARUCO_CARRO, nav_referencia, w, h):
             bt_send("carro", "KST")
-        elif resultado == "KCI":
-            bt_send("carro", "KCI")
-            print(f"[NAV] Corrección izquierda enviada: KCI")
-        elif resultado == "KCD":
-            bt_send("carro", "KCD")
-            print(f"[NAV] Corrección derecha enviada: KCD")
+            estado = nav_siguiente_estado
+            destino_str = "BRAZO" if nav_referencia == ARUCO_BRAZO else "USUARIO"
+            print(f"[FSM] LLEGADA a {destino_str} → {estado}")
 
     elif estado == RUN:
-        print(f"[DEBUG] rutina_elegida={rutina_elegida} | modo={modo_actual}")  # ← temporal
+        print(f"[DEBUG] rutina_elegida={rutina_elegida} | modo={modo_actual}")
         ok = ejecutar_rutina_dobot(robot, rutina_elegida)
         if ok:
             if modo_actual == ACOMODAR:
-                # FIX: tras depositar, navegar brazo→usuario y avisar ML al master
                 bt_send("master", 'M', 'L')
-                bt_send("carro", "KBU")
-                nav_origen           = ARUCO_CARRO
-                nav_referencia         = ARUCO_BRAZO
-                nav_signal           = "KBU"
+                nav_referencia       = ARUCO_USUARIO
                 nav_siguiente_estado = IDLE
                 estado               = NAVEGAR
+                # ← arranque feedforward de regreso
+                arrancar_carrito(corners_dict, ARUCO_USUARIO,
+                                 frame.shape[1], frame.shape[0])
                 print("[FSM] Paquete depositado → navegando a usuario")
             elif modo_actual == RECIBIR:
-                # FIX: tras recoger, avisar MR al master y volver a IDLE
                 bt_send("master", 'M', 'R')
-                bt_send("carro", "KBU")
-                nav_origen           = ARUCO_CARRO
-                nav_referencia         = ARUCO_BRAZO
-                nav_signal           = "KBU"
+                nav_referencia       = ARUCO_USUARIO
                 nav_siguiente_estado = IDLE
                 estado               = NAVEGAR
+                # ← arranque feedforward de regreso
+                arrancar_carrito(corners_dict, ARUCO_USUARIO,
+                                 frame.shape[1], frame.shape[0])
                 print("[FSM] Paquete tomado → navegando a usuario")
         else:
             estado = IDLE
 
-    #dibujamos las zonas de navegación para ver qué show ---------------------------------------------------------------------
+    # ── UI de debug ───────────────────────────────────────────────────────────
     if frame is not None:
         h, w, _ = frame.shape
         parte    = h // 6
-        # ROI (detección de color) — mitad inferior
-        roi_y = h // 2
-        cv2.rectangle(frame, (0, 0), (w, roi_y), (224, 150, 211), 2)
-        cv2.putText(frame, "ROI color", (5, roi_y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
-        # ROA (carril) — franja entre h-2*parte y h-1*parte
-        roa_y1 = 1 * parte
-        roa_y2 = 2 * parte
-        cv2.rectangle(frame, (0, roa_y1), (w, roa_y2), (178, 22, 26), 2)
-        cv2.putText(frame, "ROA carril", (5, roa_y1 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
-        # Parking Brazo — 8vo izquierdo dentro de ROA
-        pb_x2 = int(w * 0.125)
-        cv2.rectangle(frame, (0, roa_y1), (pb_x2, roa_y2), (0, 128, 255), 2)
-        cv2.putText(frame, "PKB", (5, roa_y1 + 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 128, 255), 1)
-        # Parking Usuario — 8vo derecho dentro de ROA
-        pu_x1 = int(w * 0.875)
-        cv2.rectangle(frame, (pu_x1, roa_y1), (w, roa_y2), (255, 0, 128), 2)
-        cv2.putText(frame, "PKU", (pu_x1 + 5, roa_y1 + 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 128), 1)
-        # Info de estado
-        cv2.putText(frame, f"Estado: {estado} | Modo: {modo_actual}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-        cv2.putText(frame, f"Color: {color_detectado} | Cand: {color_candidato} x{contador_conf}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 0), 2)
+        roi_y    = h // 2
+        roa_y1   = 1 * parte
+        roa_y2   = 2 * parte
+        pb_x2    = int(w * 0.125)
+        pu_x1    = int(w * 0.875)
+
+        cv2.rectangle(frame, (0, 0),    (w, roi_y),         (224, 150, 211), 2)
+        cv2.rectangle(frame, (0, roa_y1),(w, roa_y2),       (178,  22,  26), 2)
+        cv2.rectangle(frame, (0, roa_y1),(pb_x2, roa_y2),   (0,  128, 255),  2)
+        cv2.rectangle(frame, (pu_x1, roa_y1),(w, roa_y2),   (255,   0, 128), 2)
+
+        cv2.putText(frame, "ROI color", (5, roi_y + 20),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+        cv2.putText(frame, "ROA carril", (5, roa_y1 + 20),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+        cv2.putText(frame, "PKB", (5, roa_y1 + 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 128, 255), 1)
+        cv2.putText(frame, "PKU", (pu_x1 + 5, roa_y1 + 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 128), 1)
+        cv2.putText(frame, f"Estado: {estado} | Modo: {modo_actual}", (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        cv2.putText(frame, f"Color: {color_detectado} | Cand: {color_candidato} x{contador_conf}",
+                    (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 0), 2)
+
+        # Mostrar yaw en tiempo real cuando el carrito es visible
+        if ARUCO_CARRO in corners_dict:
+            yaw_live = _estimar_yaw(corners_dict[ARUCO_CARRO])
+            if yaw_live is not None:
+                cv2.putText(frame, f"Yaw carrito: {yaw_live:.1f}°", (10, 90),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 128), 2)
+
         if estado == NAVEGAR:
-            cv2.putText(frame, f"NAV destino: {'BRAZO' if nav_referencia == ARUCO_BRAZO else 'USUARIO'}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 200, 255), 2)
+            destino_str = "BRAZO" if nav_referencia == ARUCO_BRAZO else "USUARIO"
+            cv2.putText(frame, f"NAV destino: {destino_str}", (10, 115),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 200, 255), 2)
 
     cv2.imshow("Deteccion", frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
-        
- # Cleanup
+
+# ── Cleanup ───────────────────────────────────────────────────────────────────
 robot.move_to(50, 25, 50, 0, wait=True)
 ser_master.close()
 ser_carro.close()
