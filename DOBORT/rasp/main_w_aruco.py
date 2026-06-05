@@ -36,29 +36,19 @@ ARUCO_CARRO   = 25
 ARUCO_BRAZO   = 50
 ARUCO_USUARIO = 10
 
-# ── Navegación feedforward — parámetros ───────────────────────────────────────
-#
-# Tamaño físico del ArUco del carrito (metros).
-# Mide de borde a borde del cuadro negro exterior del marcador impreso.
+# ── Navegación — parámetros ───────────────────────────────────────────────────
 MARKER_SIZE_M = 0.06
-
-# Resolución de la cámara — debe coincidir con lo que entrega VideoCapture.
 FRAME_W = 640
 FRAME_H = 480
 
-# Matriz de cámara aproximada.
-# Sin calibrar con tablero: focal ≈ max(w,h) funciona bien para ángulos <30°.
-_f  = max(FRAME_W, FRAME_H)
+_f = max(FRAME_W, FRAME_H)
 CAMERA_MATRIX = np.array([
-    [_f,  0,  FRAME_W / 2],
-    [0,   _f, FRAME_H / 2],
-    [0,   0,  1           ],
+    [_f, 0,  FRAME_W / 2],
+    [0,  _f, FRAME_H / 2],
+    [0,  0,  1           ],
 ], dtype=np.float64)
 DIST_COEFFS = np.zeros((4, 1), dtype=np.float64)
 
-# Esquinas del marcador en su sistema de coordenadas local (3D).
-# Origen en el centro, Z apunta hacia la cámara.
-# Orden: top-left, top-right, bottom-right, bottom-left (igual que OpenCV).
 _hm = MARKER_SIZE_M / 2
 MARKER_CORNERS_3D = np.array([
     [-_hm,  _hm, 0],
@@ -67,28 +57,26 @@ MARKER_CORNERS_3D = np.array([
     [-_hm, -_hm, 0],
 ], dtype=np.float64)
 
-# Zona muerta: si |yaw| < este valor se considera "recto" → KAA
-ANGULO_MUERTO_DEG = 6.0
-
-# Tabla ángulo → comando de compensación PWM.
-# Formato: (umbral_superior_deg, cmd_avanzar, cmd_reversa)
-# Se evalúa de arriba hacia abajo; el primer umbral que supere el yaw gana.
+# ── Parámetros de control de navegación ──────────────────────────────────────
 #
-# CÓMO AJUSTAR UMBRALES:
-#   Corre el carrito con KAA y observa qué yaw reporta la consola cuando
-#   llega torcido. Si llega 8° hacia la derecha con KAA, el umbral de KAB
-#   debería estar en ~5° para que lo atrape antes.
-TABLA_COMANDOS = [
-    (-25.0,           "KBC", "KBC"),
-    (-15.0,           "KBB", "KBB"),
-    (-ANGULO_MUERTO_DEG, "KBA", "KBA"),
-    ( ANGULO_MUERTO_DEG, "KAA", "KAA"),
-    ( 15.0,           "KAB", "KAB"),
-    ( 25.0,           "KAC", "KAC"),
-    ( math.inf,       "KAD", "KAD"),
-]
+# Velocidad base de ambos motores (letra del protocolo K[A-J][A-J]).
+# G = 70%. Ajustar si los motores no tienen suficiente torque para arrancar.
+VEL_BASE      = 'G'   # 70%
 
-# Fracción del ancho del frame que define la zona de parking
+# Cuánto se reduce el motor más rápido para corregir.
+# 1 nivel = 10%. Con CORRECCION=1: motor rápido baja de G(70%) a F(60%).
+# Subir a 2 si la corrección es insuficiente.
+CORRECCION    = 1
+
+# Ángulo mínimo para mandar corrección (zona muerta).
+# Si el yaw está dentro de este rango, se manda velocidad base igual.
+ANGULO_MUERTO = 6.0   # grados
+
+# Tiempo mínimo entre correcciones (segundos).
+# Evita saturar el Bluetooth con correcciones en cada frame.
+THROTTLE_S    = 0.25
+
+# Zona de llegada (fracción del ancho del frame)
 PARKING_FRACCION = 0.125
 
 # ── Rutinas del Dobot ─────────────────────────────────────────────────────────
@@ -110,12 +98,12 @@ def cargar_rutinas_todas():
 rutinas = cargar_rutinas_todas()
 
 # ── Config Dobot ──────────────────────────────────────────────────────────────
-VELOCIDAD           = 100
-ACELERACION         = 100
-MODO_MOVIMIENTO     = 0x01
+VELOCIDAD            = 100
+ACELERACION          = 100
+MODO_MOVIMIENTO      = 0x01
 UMBRAL_DESVIACION_MM = 2.0
 
-# ── GPIO (finales de carrera) ─────────────────────────────────────────────────
+# ── GPIO ──────────────────────────────────────────────────────────────────────
 PINES_FT = {"ft1": 17, "ft4": 22, "ft3": 4, "ft2": 24, "ft6": 25, "ft5": 27}
 for pin in PINES_FT.values():
     GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
@@ -179,26 +167,20 @@ def detectar_color(frame):
     return "NONE", roi
 
 def detectar_arucos(frame):
-    """
-    Retorna (posiciones, corners_dict, frame).
-
-    posiciones  : {id: (cx, cy, distance_z)}  — igual que antes
-    corners_dict: {id: np.ndarray (4,2)}       — esquinas en píxeles para solvePnP
-    """
     corners, ids, _ = detector.detectMarkers(frame)
     posiciones   = {}
     corners_dict = {}
     if ids is None:
         return posiciones, corners_dict, frame
     for i, marker_id in enumerate(ids.flatten()):
-        pts      = corners[i].reshape((4, 2))
-        width_px = np.linalg.norm(pts[1] - pts[0])
-        width_m  = width_px * pixel_size
+        pts        = corners[i].reshape((4, 2))
+        width_px   = np.linalg.norm(pts[1] - pts[0])
+        width_m    = width_px * pixel_size
         distance_z = (focal_length_m * marker_length) / width_m if width_m > 0 else 0
         cx = int(np.mean(pts[:, 0]))
         cy = int(np.mean(pts[:, 1]))
         posiciones[marker_id]   = (cx, cy, distance_z)
-        corners_dict[marker_id] = pts                   # ← nuevo
+        corners_dict[marker_id] = pts
 
         pts_int = pts.astype(int)
         cv2.polylines(frame, [pts_int], True, (0, 255, 0), 2)
@@ -207,21 +189,14 @@ def detectar_arucos(frame):
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (25, 255, 255), 1)
     return posiciones, corners_dict, frame
 
-# ── Navegación feedforward ────────────────────────────────────────────────────
+# ── Control de navegación ─────────────────────────────────────────────────────
 
 def _estimar_yaw(corners_2d: np.ndarray):
     """
-    Estima el yaw del ArUco usando solvePnP y las esquinas en píxeles.
-
-    Retorna yaw en grados, o None si solvePnP falla.
-
-    Yaw ≈ 0°  → marcador mirando de frente a la cámara (carrito recto).
-    Yaw > 0°  → girado a la derecha.
-    Yaw < 0°  → girado a la izquierda.
-
-    Si el ArUco está montado mirando hacia arriba (plano horizontal) el yaw
-    corresponde directamente al ángulo de rumbo del carrito. Si las correcciones
-    van al revés, negarlo aquí: return -yaw
+    Estima el yaw del ArUco del carrito usando solvePnP.
+    Yaw > 0 → carrito girado a la derecha (motor derecho se adelanta).
+    Yaw < 0 → carrito girado a la izquierda (motor izquierdo se adelanta).
+    Retorna None si solvePnP falla.
     """
     ok, rvec, _ = cv2.solvePnP(
         MARKER_CORNERS_3D,
@@ -234,18 +209,43 @@ def _estimar_yaw(corners_2d: np.ndarray):
         return None
     R, _ = cv2.Rodrigues(rvec)
     sy = math.sqrt(R[0, 0]**2 + R[1, 0]**2)
-    yaw = math.degrees(math.atan2(R[1, 0], R[0, 0])) if sy > 1e-6 else 0.0
-    return yaw
+    return math.degrees(math.atan2(R[1, 0], R[0, 0])) if sy > 1e-6 else 0.0
 
-def _elegir_comando(yaw: float, es_avanzar: bool) -> str:
-    for umbral, cmd_av, cmd_rev in TABLA_COMANDOS:
-        if yaw < umbral:
-            return cmd_av if es_avanzar else cmd_rev
-    return "KAA"
+def _calcular_cmd_pwm(yaw: float) -> str:
+    """
+    Convierte el yaw en un comando K[A-J][A-J].
 
-def verificar_llegada(posiciones: dict, id_carro: int, id_destino: int,
-                       frame_w: int, frame_h: int) -> bool:
-    """Retorna True cuando el carrito entra en la zona de parking del destino."""
+    Motor derecho (ENB) gira más rápido → cuando yaw ≈ 0 ya hay que
+    compensar bajando un nivel el motor derecho respecto al izquierdo.
+    Eso se ajusta con el offset base (VEL_BASE en izq, VEL_BASE-1 en der).
+
+    Si el yaw supera ANGULO_MUERTO se aplica corrección adicional:
+      yaw > 0 (se va a la derecha) → bajar motor derecho más
+      yaw < 0 (se va a la izquierda) → bajar motor izquierdo
+
+    CÓMO AJUSTAR:
+      Si el carrito sigue yéndose a la derecha con yaw≈0, aumenta el
+      offset base bajando la letra del motor derecho (de F a E, etc.).
+      Si la corrección es brusca, reduce CORRECCION de 1 a 0 y sube
+      ANGULO_MUERTO.
+    """
+    base_izq = ord(VEL_BASE)           # motor izquierdo  (ENA)
+    base_der = ord(VEL_BASE) - 1       # motor derecho -1 nivel por asimetría (ENB)
+
+    if yaw > ANGULO_MUERTO:
+        # Carrito se va a la derecha → frenar motor derecho
+        base_der -= CORRECCION
+    elif yaw < -ANGULO_MUERTO:
+        # Carrito se va a la izquierda → frenar motor izquierdo
+        base_izq -= CORRECCION
+
+    # Clampear entre A(10%) y J(100%)
+    base_izq = max(ord('A'), min(ord('J'), base_izq))
+    base_der = max(ord('A'), min(ord('J'), base_der))
+
+    return f"K{chr(base_izq)}{chr(base_der)}"
+
+def verificar_llegada(posiciones, id_carro, id_destino, frame_w, frame_h):
     if id_carro not in posiciones:
         return False
     cx, cy, _ = posiciones[id_carro]
@@ -258,35 +258,6 @@ def verificar_llegada(posiciones: dict, id_carro: int, id_destino: int,
         return cx < frame_w * PARKING_FRACCION
     else:
         return cx > frame_w * (1.0 - PARKING_FRACCION)
-
-def arrancar_carrito(corners_dict: dict, destino_id: int, frame_w: int, frame_h: int) -> bool:
-    """
-    Estima el yaw del carrito con solvePnP, manda el offset de PWM y luego el arranque.
-
-    Retorna True si se enviaron los comandos, False si el ArUco no era visible.
-    """
-    es_avanzar = (destino_id == ARUCO_BRAZO)
-
-    if ARUCO_CARRO not in corners_dict:
-        print("[NAV] ArUco del carrito no visible — no se puede estimar yaw")
-        return False
-
-    yaw = _estimar_yaw(corners_dict[ARUCO_CARRO])
-    if yaw is None:
-        print("[NAV] solvePnP falló — usando KAA por defecto")
-        yaw = 0.0
-
-    cmd_offset   = _elegir_comando(yaw, es_avanzar)
-    cmd_arranque = "KUB" if es_avanzar else "KBU"
-
-    print(f"[NAV] Yaw estimado: {yaw:.1f}° → offset: {cmd_offset} → arranque: {cmd_arranque}")
-
-    # 1. Offset de PWM (KL25 lo guarda internamente, no arranca todavía)
-    bt_send("carro", cmd_offset)
-    time.sleep(0.05)   # gap mínimo para que el KL25 procese antes del arranque
-    # 2. Arranque con PWM ya compensado
-    bt_send("carro", cmd_arranque)
-    return True
 
 # ── Funciones Dobot ───────────────────────────────────────────────────────────
 
@@ -402,18 +373,20 @@ def verificar_rutina_recibir(numero):
     return numero if valor == 1 else None
 
 # ── Variables de estado ───────────────────────────────────────────────────────
-estado         = IDLE
-modo_actual    = None
-color_paquete  = None
-rutina_elegida = None
+estado          = IDLE
+modo_actual     = None
+color_paquete   = None
+rutina_elegida  = None
 FRAMES_THRESHOLD = 20
-contador_conf  = 0
+contador_conf   = 0
 color_candidato = None
 
-nav_origen          = None
-nav_referencia      = None
-nav_signal          = None
+nav_referencia       = None
 nav_siguiente_estado = None
+
+# Control de corrección en navegación
+ultimo_cmd_nav  = 0.0
+ultimo_cmd_sent = ""
 
 # ── Inicialización ────────────────────────────────────────────────────────────
 print("Iniciando hilos Bluetooth...")
@@ -430,13 +403,13 @@ print("Esperando señal BT...")
 # ── Main loop ─────────────────────────────────────────────────────────────────
 roi          = None
 posiciones   = {}
-corners_dict = {}   # esquinas ArUco para solvePnP
+corners_dict = {}
 
 while True:
     ret, frame = cap.read()
     if ret and frame is not None:
-        color_detectado, roi              = detectar_color(frame)
-        posiciones, corners_dict, frame   = detectar_arucos(frame)
+        color_detectado, roi            = detectar_color(frame)
+        posiciones, corners_dict, frame = detectar_arucos(frame)
     else:
         time.sleep(0.05)
         continue
@@ -463,9 +436,9 @@ while True:
                 nav_referencia       = ARUCO_BRAZO
                 nav_siguiente_estado = RUN
                 estado               = NAVEGAR
-                # ← arranque feedforward: calcula yaw y manda offset+KUB
-                arrancar_carrito(corners_dict, ARUCO_BRAZO,
-                                 frame.shape[1], frame.shape[0])
+                ultimo_cmd_nav       = 0.0
+                ultimo_cmd_sent      = ""
+                bt_send("carro", "KUB")   # arranca a velocidad base
                 print(f"[FSM] NAVEGAR → RUN rutina {numero}")
             else:
                 bt_send("master", 'M', 'N')
@@ -496,9 +469,9 @@ while True:
             nav_referencia       = ARUCO_BRAZO
             nav_siguiente_estado = RUN
             estado               = NAVEGAR
-            # ← arranque feedforward
-            arrancar_carrito(corners_dict, ARUCO_BRAZO,
-                             frame.shape[1], frame.shape[0])
+            ultimo_cmd_nav       = 0.0
+            ultimo_cmd_sent      = ""
+            bt_send("carro", "KUB")   # arranca a velocidad base
         else:
             print("Sin espacio → ME al MASTER")
             bt_send("master", 'M', 'E')
@@ -506,11 +479,25 @@ while True:
 
     elif estado == NAVEGAR:
         h, w, _ = frame.shape
+
+        # ── Verificar llegada ─────────────────────────────────────────────
         if verificar_llegada(posiciones, ARUCO_CARRO, nav_referencia, w, h):
             bt_send("carro", "KST")
             estado = nav_siguiente_estado
             destino_str = "BRAZO" if nav_referencia == ARUCO_BRAZO else "USUARIO"
             print(f"[FSM] LLEGADA a {destino_str} → {estado}")
+
+        # ── Corrección de yaw en tiempo real ──────────────────────────────
+        elif ARUCO_CARRO in corners_dict:
+            yaw = _estimar_yaw(corners_dict[ARUCO_CARRO])
+            if yaw is not None:
+                cmd = _calcular_cmd_pwm(yaw)
+                ahora = time.time()
+                # Manda corrección solo si cambió el comando o pasó el throttle
+                if cmd != ultimo_cmd_sent or (ahora - ultimo_cmd_nav) > THROTTLE_S:
+                    bt_send("carro", cmd)
+                    ultimo_cmd_nav  = ahora
+                    ultimo_cmd_sent = cmd
 
     elif estado == RUN:
         print(f"[DEBUG] rutina_elegida={rutina_elegida} | modo={modo_actual}")
@@ -521,18 +508,18 @@ while True:
                 nav_referencia       = ARUCO_USUARIO
                 nav_siguiente_estado = IDLE
                 estado               = NAVEGAR
-                # ← arranque feedforward de regreso
-                arrancar_carrito(corners_dict, ARUCO_USUARIO,
-                                 frame.shape[1], frame.shape[0])
+                ultimo_cmd_nav       = 0.0
+                ultimo_cmd_sent      = ""
+                bt_send("carro", "KBU")
                 print("[FSM] Paquete depositado → navegando a usuario")
             elif modo_actual == RECIBIR:
                 bt_send("master", 'M', 'R')
                 nav_referencia       = ARUCO_USUARIO
                 nav_siguiente_estado = IDLE
                 estado               = NAVEGAR
-                # ← arranque feedforward de regreso
-                arrancar_carrito(corners_dict, ARUCO_USUARIO,
-                                 frame.shape[1], frame.shape[0])
+                ultimo_cmd_nav       = 0.0
+                ultimo_cmd_sent      = ""
+                bt_send("carro", "KBU")
                 print("[FSM] Paquete tomado → navegando a usuario")
         else:
             estado = IDLE
@@ -540,19 +527,19 @@ while True:
     # ── UI de debug ───────────────────────────────────────────────────────────
     if frame is not None:
         h, w, _ = frame.shape
-        parte    = h // 6
-        roi_y    = h // 2
-        roa_y1   = 1 * parte
-        roa_y2   = 2 * parte
-        pb_x2    = int(w * 0.125)
-        pu_x1    = int(w * 0.875)
+        parte  = h // 6
+        roi_y  = h // 2
+        roa_y1 = 1 * parte
+        roa_y2 = 2 * parte
+        pb_x2  = int(w * 0.125)
+        pu_x1  = int(w * 0.875)
 
-        cv2.rectangle(frame, (0, 0),    (w, roi_y),         (224, 150, 211), 2)
-        cv2.rectangle(frame, (0, roa_y1),(w, roa_y2),       (178,  22,  26), 2)
-        cv2.rectangle(frame, (0, roa_y1),(pb_x2, roa_y2),   (0,  128, 255),  2)
-        cv2.rectangle(frame, (pu_x1, roa_y1),(w, roa_y2),   (255,   0, 128), 2)
+        cv2.rectangle(frame, (0, 0),     (w, roi_y),       (224, 150, 211), 2)
+        cv2.rectangle(frame, (0, roa_y1),(w, roa_y2),      (178,  22,  26), 2)
+        cv2.rectangle(frame, (0, roa_y1),(pb_x2, roa_y2),  (0,  128, 255),  2)
+        cv2.rectangle(frame, (pu_x1, roa_y1),(w, roa_y2),  (255,   0, 128), 2)
 
-        cv2.putText(frame, "ROI color", (5, roi_y + 20),
+        cv2.putText(frame, "ROI color",  (5, roi_y + 20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
         cv2.putText(frame, "ROA carril", (5, roa_y1 + 20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
@@ -565,17 +552,18 @@ while True:
         cv2.putText(frame, f"Color: {color_detectado} | Cand: {color_candidato} x{contador_conf}",
                     (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 0), 2)
 
-        # Mostrar yaw en tiempo real cuando el carrito es visible
+        # Yaw en tiempo real
         if ARUCO_CARRO in corners_dict:
             yaw_live = _estimar_yaw(corners_dict[ARUCO_CARRO])
             if yaw_live is not None:
-                cv2.putText(frame, f"Yaw carrito: {yaw_live:.1f}°", (10, 90),
+                cmd_live = _calcular_cmd_pwm(yaw_live)
+                cv2.putText(frame, f"Yaw: {yaw_live:.1f}°  cmd: {cmd_live}", (10, 90),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 128), 2)
 
         if estado == NAVEGAR:
             destino_str = "BRAZO" if nav_referencia == ARUCO_BRAZO else "USUARIO"
-            cv2.putText(frame, f"NAV destino: {destino_str}", (10, 115),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 200, 255), 2)
+            cv2.putText(frame, f"NAV → {destino_str}  último cmd: {ultimo_cmd_sent}",
+                        (10, 115), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 200, 255), 2)
 
     cv2.imshow("Deteccion", frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
