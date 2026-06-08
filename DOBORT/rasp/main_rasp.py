@@ -2,39 +2,56 @@ import cv2
 import numpy as np
 import RPi.GPIO as GPIO
 import time
-import pydobot
+from pydobotplus import Dobot
 import json
 import serial
 import threading
+import os
 import queue
 
 # Rutinas del dobot
-with open('rutinas.json', 'r', encoding='utf-8') as archivo:
-    rutinas = json.load(archivo)
+CARPETA_RUTINAS = "rutinas"
+def cargar_rutinas_todas():
+    rutinas = {}
+    for i in range(1, 13):
+        ruta = os.path.join(CARPETA_RUTINAS, f"rutina_{i:02d}.json")
+        if os.path.exists(ruta):
+            with open(ruta, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            rutinas[f"{i:02d}"] = data.get("rutina", [])
+            print(f"cargada {ruta} con {len(rutinas[f'{i:02d}'])} puntos")
+        else:
+            print(f"rutina no encontrada: {ruta}")
+    return rutinas
+
+rutinas = cargar_rutinas_todas()
+
+# ── Config Dobot ──────────────────────────────────────────────────────────────
+VELOCIDAD            = 100
+ACELERACION          = 100
+MODO_MOVIMIENTO      = 0x01
+UMBRAL_DESVIACION_MM = 2.0
 
 # configuración de pines GPIO
-PORT = "/dev/ttyAMA0" 
+PORT = "/dev/ttyS0" 
 GPIO.setmode(GPIO.BCM)
-PINES_FT = {
-    "ft1": 5,
-    "ft2": 6,
-    "ft3": 13,
-    "ft4": 19,
-    "ft5": 26,
-    "ft6": 16
-}
+PINES_FT = {"ft1": 17, "ft4": 22, "ft3": 4, "ft2": 24, "ft6": 25, "ft5": 27}
 for pin in PINES_FT.values():
     GPIO.setup(pin, GPIO.IN)
 
 # Bluetooth
-ser = serial.Serial('/dev/rfcomm0', 9600, timeout=0.1)
+ser_master = serial.Serial('/dev/rfcomm1', 9600, timeout=0.1)
+ser_carro  = serial.Serial('/dev/rfcomm0', 9600, timeout=0.1)
+
+bt_queue_master = queue.Queue()
+bt_queue_carro  = queue.Queue()
 
 # filtro de color para la cámara
 cap = cv2.VideoCapture(0)
 lower_red1   = np.array([0,   100, 100]); upper_red1   = np.array([10,  255, 255])
 lower_red2   = np.array([170, 100, 100]); upper_red2   = np.array([180, 255, 255])
 lower_blue   = np.array([100, 100, 100]); upper_blue   = np.array([140, 255, 255])
-lower_yellow = np.array([22,  93,  0  ]); upper_yellow = np.array([45,  255, 255])
+lower_yellow = np.array([10,  100, 100]); upper_yellow = np.array([25,  255, 255])
 
 # Estados
 IDLE       = "IDLE"
@@ -57,12 +74,16 @@ color_candidato   = None
 bt_queue = queue.Queue()
 
 # Bluetooth -------------------------------------------------------------------
-def bt_send(destino, dato):
-    msg = (destino + dato).encode('ascii')
-    ser.write(msg)
-    print(f"[BT TX] → '{destino}{dato}'")
+def bt_send(destino, *args):
+    msg = ''.join(map(str, args))
+    if destino == "master":
+        ser_master.write(msg.encode())
+        print(f"[BT TX → MASTER] '{msg}'")
+    elif destino == "carro":
+        ser_carro.write(msg.encode())
+        print(f"[BT TX → CARRO] '{msg}'")
 
-def receive_loop():
+def receive_loop(ser, bt_queue, nombre):
     while True:
         dest = ser.read(1)
         if not dest:
@@ -70,10 +91,8 @@ def receive_loop():
         dato = ser.read(1)
         if not dato:
             continue
-        dest  = dest.decode('ascii', errors='ignore')
-        dato  = dato.decode('ascii', errors='ignore')
-        señal = dest + dato
-        print(f"[BT RX] ← '{señal}'")
+        señal = dest.decode('ascii', errors='ignore') + dato.decode('ascii', errors='ignore')
+        print(f"[BT RX ← {nombre}] '{señal}'")
         bt_queue.put(señal)
 
 # Funciones auxiliares ------------------------------------------------------
@@ -97,12 +116,102 @@ def detectar_color(frame):
     }
     dominante = max(areas, key=areas.get)
     return (dominante if areas[dominante] > 500 else "NONE"), roi
+# ── Funciones Dobot ───────────────────────────────────────────────────────────
 
-def decidir_rutina_acomodar(color): #para modo acomodar
+def obtener_posicion_actual(robot):
+    try:
+        pose = robot.get_pose()
+        if isinstance(pose, (tuple, list)):
+            pose = pose[0]
+        return {"x": pose.x, "y": pose.y, "z": pose.z, "r": pose.r}
+    except Exception as e:
+        print(f"  [WARN] No se pudo leer posición actual: {e}")
+        return None
+
+def calcular_desviacion(pos_real, punto_esperado):
+    ejes   = ["x", "y", "z"]
+    deltas = {eje: abs(pos_real[eje] - punto_esperado[eje]) for eje in ejes}
+    return max(deltas.values()), deltas
+
+def ejecutar_rutina_dobot(robot, numero):
+    ruta = os.path.join(CARPETA_RUTINAS, f"rutina_{numero:02d}.json")
+    if not os.path.exists(ruta):
+        print(f"[ERROR] No existe {ruta}")
+        return False
+    with open(ruta, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    puntos = data.get("rutina", [])
+    if not puntos:
+        print(f"[ERROR] Rutina {numero:02d} vacía")
+        return False
+
+    print(f"[DOBOT] Ejecutando rutina {numero:02d} ({len(puntos)} puntos)")
+    try:
+        robot.speed(velocity=VELOCIDAD, acceleration=ACELERACION)
+    except Exception:
+        pass
+
+    try:
+        p0 = puntos[0]
+        robot.move_to(p0["x"], p0["y"], p0["z"], p0.get("r", 0),
+                      wait=True, mode=MODO_MOVIMIENTO)
+        time.sleep(0.4)
+    except Exception as e:
+        print(f"[ERROR] No se pudo mover al punto inicial: {e}")
+        return False
+
+    correcciones = 0
+    try:
+        for i, punto in enumerate(puntos):
+            x   = punto["x"];  y = punto["y"]
+            z   = punto["z"];  r = punto.get("r", 0)
+            suc = punto.get("succion", False)
+
+            if i > 0:
+                for intento in range(3):
+                    pos_real = obtener_posicion_actual(robot)
+                    if pos_real is None:
+                        break
+                    desviacion, deltas = calcular_desviacion(pos_real, puntos[i - 1])
+                    if desviacion <= UMBRAL_DESVIACION_MM:
+                        print(f"  [{i+1}/{len(puntos)}] ✓ (Δmax:{desviacion:.1f}mm) "
+                              f"→ X:{x} Y:{y} Z:{z} R:{r} Suc:{'SÍ' if suc else 'NO'}")
+                        break
+                    correcciones += 1
+                    ant = puntos[i - 1]
+                    print(f"  [CORRECCIÓN #{correcciones}] intento {intento+1}/3 "
+                          f"Δx:{deltas['x']:.1f} Δy:{deltas['y']:.1f} Δz:{deltas['z']:.1f}mm")
+                    robot.move_to(ant["x"], ant["y"], ant["z"],
+                                  ant.get("r", 0), wait=True, mode=MODO_MOVIMIENTO)
+                    time.sleep(0.3)
+                    robot.move_to(x, y, z, r, wait=True, mode=MODO_MOVIMIENTO)
+                    time.sleep(0.3)
+                else:
+                    print(f"  [WARN] punto {i+1} no convergió, continuando...")
+            else:
+                print(f"  [{i+1}/{len(puntos)}] → X:{x} Y:{y} Z:{z} R:{r} "
+                      f"Suc:{'SÍ' if suc else 'NO'}")
+
+            robot.move_to(x, y, z, r, wait=True, mode=MODO_MOVIMIENTO)
+            robot.suck(suc)
+            time.sleep(0.3)
+
+        print(f"[DOBOT] Rutina {numero:02d} completada ({correcciones} correcciones)")
+        return True
+    except Exception as e:
+        print(f"[ERROR] Interrumpida en punto {i+1}: {e}")
+        return False
+    finally:
+        try:
+            robot.suck(False)
+        except Exception:
+            pass
+
+def decidir_rutina_acomodar(color):
     slots = {
-        "ROJO":     [("ft1", 1), ("ft4", 4)],
-        "AZUL":     [("ft2", 2), ("ft5", 5)],
-        "AMARILLO": [("ft3", 3), ("ft6", 6)],
+        "ROJO":     [("ft1", 7),  ("ft4", 10)],
+        "AZUL":     [("ft2", 8),  ("ft5", 11)],
+        "AMARILLO": [("ft3", 9),  ("ft6", 12)],
     }
     for ft_nombre, numero_rutina in slots[color]:
         valor = leer_ft(ft_nombre)
@@ -120,147 +229,63 @@ def verificar_rutina_recibir(numero):
     print(f"[FT] {ft_nombre} = {valor} ({'ocupado' if valor == 1 else 'vacío'})")
     return numero if valor == 1 else None
 
-def ejecutar_rutina_dobot(robot, numero): #cuando recibe RL o RE
-    clave = str(numero)
-    if clave not in rutinas:
-        print(f"[ERROR] Rutina {clave} no encontrada")
-        return False
-    puntos = rutinas[clave]
-    print(f"[DOBOT] Ejecutando rutina {clave} ({len(puntos)} puntos)")
-    for i, p in enumerate(puntos):
-        print(f"  Punto {i}: x={p['x']} y={p['y']} z={p['z']} r={p['r']} suc={p['suction']}")
-        robot.move_to(p['x'], p['y'], p['z'], p['r'], wait=True)
-        try:
-            robot.suck(enable=p['suction'])
-        except TypeError:
-            robot.suck(p['suction'])
-        time.sleep(0.5)
-    try:
-        robot.suck(False)
-    except Exception:
-        pass
-    print(f"[DOBOT] Rutina {clave} completada")
-    return True
-
 # Inicialización -------------------------------------------------------------
-print("[SYS] Iniciando hilo Bluetooth...")
-threading.Thread(target=receive_loop, daemon=True).start()
+print("Iniciando hilos Bluetooth...")
+threading.Thread(target=receive_loop,
+                 args=(ser_master, bt_queue_master, "MASTER"), daemon=True).start()
+threading.Thread(target=receive_loop,
+                 args=(ser_carro,  bt_queue_carro,  "CARRO"),  daemon=True).start()
 
-print("[SYS] Conectando al Dobot Magician...")
-robot = pydobot.Dobot(port=PORT, verbose=False)
-print("[SYS] ¡Conectado!")
-#robot.speed(velocity=50, acceleration=50)
-#print("[SYS] Brazo a posición HOME")
-#robot.move_to(250, 25, 50, 0, wait=True)
+print("Conectando al Dobot Magician...")
+robot = Dobot(port=PORT)
+print("¡Conectado!")
 print("Esperando señal BT...")
 
-# ── Main loop ─────────────────────────────────────────────────────────────────
-frame, ret = cap.read()
-roi            = None
-color_detectado = "NONE"
 
+# ── Main loop ─────────────────────────────────────────────────────────────────
+roi          = None
+color_detectado = "NONE"
 while True:
+    ret, frame = cap.read()
+    if ret and frame is not None:
+        color_detectado, roi            = detectar_color(frame)
+    else:
+        time.sleep(0.05)
+        continue
 
     # Señales BT -------------------------------------------------------------
-    while not bt_queue.empty():
-        señal = bt_queue.get()
+    while not bt_queue_master.empty():
+        señal = bt_queue_master.get()
         print(f"Señal recibida: '{señal}' | Estado: {estado}")
 
         if señal == "RL" and estado == IDLE: #RL es para acomodar, RE es para recibir
             modo_actual = "ACOMODAR"
             estado      = DETECTANDO
-            print("[SYS] Modo ACOMODAR →cámara detectando color del paquete")
-
-        elif señal == "RE" and estado == IDLE:
-            if estado == IDLE:
-                # RE llegó primero, esperamos R1-R6
-                modo_actual = "RECIBIR"
-                estado      = RECIBIR
-                print("Modo RECIBIR activado → esperando R1-R6 del MASTER...")
-            elif estado == ESPERANDO_RE:
-                # R1-R6 ya llegó antes que RE, ahora sí podemos ejecutar
-                print(f"RE recibido, posición elegida: {posicion_pendiente} → ejecutando rutina")
-                modo_actual = "RECIBIR"
-                rutina_valida = verificar_rutina_recibir(posicion_pendiente)
-                if rutina_valida is not None:
-                    rutina_elegida     = rutina_valida
-                    posicion_pendiente = None
-                    estado             = RUNNING
-                    print(f"Casilla {rutina_elegida} ocupada → iniciando rutina {rutina_elegida}")
-                    bt_send('M', 'N')
-
-                else:
-                    print(f"[SYS] Casilla {posicion_pendiente} vacía → ME al MASTER")
-                    bt_send('M', 'N')
-                    posicion_pendiente = None
-                    modo_actual        = None
-                    estado             = IDLE
+            print("Modo ACOMODAR →cámara detectando color del paquete")
 
         elif señal in ("R1","R2","R3","R4","R5","R6"):
-            numero = int(señal[1])
-            print(f"[BT] Posición solicitada: {numero} | Estado: {estado}")
-
-            if estado in (RECIBIR, IDLE, ESPERANDO_RE):
-                # primero verificamos si hay paquete en esa casilla
-                rutina_valida = verificar_rutina_recibir(numero)
-
-                if rutina_valida is not None:
-                    # hay paquete → avisamos al MASTER y esperamos RE del SLAVE
-                    print(f"[SYS] Casilla {numero} tiene paquete → MS al MASTER")
-                    bt_send('M', 'S')          # MS → MASTER: hay paquete
-                    posicion_pendiente = numero
-                    modo_actual        = "RECIBIR"
-
-                    if estado == RECIBIR:
-                        # RE ya llegó antes → ejecutar directo
-                        print("[SYS] RE ya estaba → ejecutando rutina directamente")
-                        rutina_elegida     = rutina_valida
-                        posicion_pendiente = None
-                        estado             = RUNNING
-                    else:
-                        # esperamos RE del SLAVE para confirmar que el carrito está listo
-                        estado = ESPERANDO_RE
-                        print(f"[SYS] Esperando RE del SLAVE para ejecutar rutina {numero}...")
-
-                else:
-                    # no hay paquete → avisamos al MASTER
-                    print(f"[SYS] Casilla {numero} vacía → MN al MASTER")
-                    bt_send('M', 'N')          # MN → MASTER: no hay paquete
-                    posicion_pendiente = None
-                    modo_actual        = None
-                    estado             = IDLE
+            if estado != IDLE:
+                print(f"{señal} ignorado, estado: {estado}")
+                continue
+            numero        = int(señal[1])
+            rutina_valida = verificar_rutina_recibir(numero)
+            if rutina_valida is not None:
+                bt_send("master", 'M', 'S')
+                posicion_pendiente = numero
+                rutina_elegida     = rutina_valida
+                modo_actual        = "RECIBIR"
+                estado             = ESPERANDO_RE
+                print(f"Casilla {numero} ocupada → esperando RE")
             else:
-                print(f"[WARN] R{numero} en estado inesperado: {estado}, ignorando")
+                bt_send("master", 'M', 'N')
+                print(f"Casilla {numero} vacía")
 
         elif señal == "RE":
-            if estado == IDLE:
-                modo_actual = "RECIBIR"
-                estado      = RECIBIR
-                print("[SYS] RE recibido → esperando R1-R6 del MASTER...")
-
-            elif estado == ESPERANDO_RE:
-                # teníamos posición pendiente, ahora el carrito confirmó que está listo
-                print(f"[SYS] RE recibido, ejecutando rutina pendiente: {posicion_pendiente}")
-                rutina_valida = verificar_rutina_recibir(posicion_pendiente)
-                if rutina_valida is not None:
-                    rutina_elegida     = rutina_valida
-                    posicion_pendiente = None
-                    estado             = RUNNING
-                    print(f"[SYS] Iniciando rutina {rutina_elegida}")
-                else:
-                    print(f"[SYS] Casilla ya no tiene paquete → MN al MASTER")
-                    bt_send('M', 'N')
-                    posicion_pendiente = None
-                    modo_actual        = None
-                    estado             = IDLE
+            if estado == ESPERANDO_RE:
+                print(f"RE recibido → ejecutando rutina {rutina_elegida}")
+                estado = RUNNING
             else:
-                print(f"[WARN] RE en estado inesperado: {estado}, ignorando")
-
-    # Leer cámara (siempre, para mantener el buffer fresco)
-    if ret and frame is not None:
-        color_detectado, roi = detectar_color(frame)
-    else:
-        time.sleep(0.05)
+                print(f"RE ignorado, estado: {estado}")
 
     # Máquina de estados ------------------------------------------------------
     if estado == DETECTANDO: #sólo llamamod a detectando cuando el modo es acomodar, porque ahí es cuando la cámara tiene que detectar el color del paquete para decidir la rutina. En recibir no importa el color, sólo la posición del MASTER
@@ -287,26 +312,28 @@ while True:
             estado = RUNNING
         else:
             print("[SYS] Sin espacio → ME al MASTER")
-            bt_send('M', 'E')
+            bt_send("master", 'M', 'E')
             color_paquete = None
             modo_actual   = None
             estado        = IDLE
 
     elif estado == RUNNING:
-        print(f"[SYS] Iniciando ejecución → rutina {rutina_elegida} | Modo: {modo_actual}")
+        print(f"[SYS] Ejecutando rutina {rutina_elegida} | Modo: {modo_actual}")
         ok = ejecutar_rutina_dobot(robot, rutina_elegida)
         if ok:
             if modo_actual == "ACOMODAR":
-                bt_send('K', '2')   # brazo tomó el paquete
-                bt_send('K', 'B')   # brazo terminó rutina
+                bt_send("master", 'M', 'L')
             elif modo_actual == "RECIBIR":
-                bt_send('K', 'B')   # brazo terminó rutina
-        rutina_elegida  = None
-        color_paquete   = None
-        modo_actual     = None
-        color_detectado = "NONE"    # evita re-detección inmediata
-        estado          = IDLE
-        print("[SYS] → IDLE")
+                bt_send("master", 'M', 'R')
+        else:
+            print("Rutina falló")
+        rutina_elegida     = None
+        color_paquete      = None
+        modo_actual        = None
+        posicion_pendiente = None
+        color_detectado    = "NONE"
+        estado             = IDLE
+        print("IDLE")
 
     # 4. UI 
     if roi is not None:
@@ -321,7 +348,8 @@ while True:
 
 # Cleanup
 robot.move_to(50, 25, 50, 0, wait=True)
-ser.close()
+ser_master.close()
+ser_carro.close()
 cap.release()
 cv2.destroyAllWindows()
 GPIO.cleanup()
