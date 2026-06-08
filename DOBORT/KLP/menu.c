@@ -1,3 +1,5 @@
+//KLPrincipal- Código para el sistema embebido de la FRDM KL25z encargada de la interfaz y master de comunicación
+//FreeRTOS para evitar superloops y separar responsabilidades entre tareas
 #include <MKL25Z4.h>
 #include "FreeRTOS.h"
 #include "task.h"
@@ -41,8 +43,8 @@ void PORTA_IRQHandler(void){
 	if(PORTA->ISFR & (1 << 13)){
 		PORTA->ISFR = (1 << 13);
 		BaseType_t xWoken = pdFALSE;
-		xSemaphoreGiveFromISR(sem_emergencia, &xWoken);
-		portYIELD_FROM_ISR(xWoken);
+		xSemaphoreGiveFromISR(sem_emergencia, &xWoken); //Despierta tarea_emergencia (friendly reminder, la ISR (Interruption service routine) debe ser corta)
+		portYIELD_FROM_ISR(xWoken); //Sin esperar al siguiente tick, ISR termina, cambia de contexto inmediatamente y la emergencia corre
 	}
 }
 
@@ -77,17 +79,17 @@ void tarea_ui(void *pv){
 }
 
 int main(void){
-	BOARD_InitBootClocks();
-	BOARD_InitPins();
-	TPM0_init();
-	UART1_init(9600);
+	BOARD_InitBootClocks(); //deja core clock con 48MHz, bus clock con 24MHz y flash clock con 24MHZ
+	BOARD_InitPins(); 
+	TPM0_init(); //inicializamos clock de hardware
+	UART1_init(9600); 
 	LCD_init();
 	keypad_init();
-	uart_queue = xQueueCreate(10, sizeof(char));
-	sem_emergencia =  xSemaphoreCreateBinary();
-	xTaskCreate(tarea_emergencia, "EMG", 256, NULL, 3, NULL);
-	xTaskCreate(tarea_uart_rx, "URX", 256, NULL, 2, NULL);
-	xTaskCreate(tarea_ui, "UI", 512, NULL, 1, NULL);
+	uart_queue = xQueueCreate(10, sizeof(char)); //reservamos espacio en la queue para 10 caractéres
+	sem_emergencia =  xSemaphoreCreateBinary(); //semáforo binario 0: no hay emergencia 1: hay emergencia
+	xTaskCreate(tarea_emergencia, "EMG", 256, NULL, 3, NULL); //paro de emergencia, más alta prioridad
+	xTaskCreate(tarea_uart_rx, "URX", 256, NULL, 2, NULL); //mensajes bluetooth, para evitar que lleguen datos, no leerlos y que se pierdan, debe ejecutarse antes que interfaz
+	xTaskCreate(tarea_ui, "UI", 512, NULL, 1, NULL); //interfaz usuario, puede esperar
 	vTaskStartScheduler();
 	while(1){}
 }
@@ -233,12 +235,14 @@ void flujo_recibir(void) {
     }
 }
 
-void TPM0_init(void) {
-    SIM->SCGC6 |= SIM_SCGC6_TPM0_MASK;
-    SIM->SOPT2 |= SIM_SOPT2_TPMSRC(1);
+void TPM0_init(void) { //temporizador de HardWare
+    SIM->SCGC6 |= SIM_SCGC6_TPM0_MASK; //SCGC: System Clock Gate Control, la KL apaga periféricos para ahorrar energía, hay que habilitarlos
+    SIM->SOPT2 |= SIM_SOPT2_TPMSRC(1); //la fuente de TPM, en este caso la src 1 da 48MHz
     TPM0->SC  = 0; TPM0->CNT = 0;
-    TPM0->MOD = 3000 - 1;
-    TPM0->SC  = TPM_SC_CMOD(1) | TPM_SC_PS(4) | TPM_SC_TOF_MASK;
+    TPM0->MOD = 3000 - 1; //3MHZ = 1ms
+    TPM0->SC  = TPM_SC_CMOD(1) | TPM_SC_PS(4) | TPM_SC_TOF_MASK; //prescaler: para poder adaptar la frecuencia del reloj del sistema y establecer 
+	//la tasa de interrupción del tick del kernel (núcleo de FreeRTOS), que determinará la precisión temporal y frecuencia del scheduler
+	//En este caso, queda de 3MHz
 }
 
 void delayMs(int n) {
@@ -261,7 +265,7 @@ void delayUs(int n) {
 void UART1_init(uint32_t baud) {
     SIM->SCGC4 |= SIM_SCGC4_UART1_MASK;
     UART1->C2 = 0;
-    uint16_t sbr = 24000000 / (16 * baud);
+    uint16_t sbr = 24000000 / (16 * baud); //por su Baud Rate, UART va a tomar el bus clock, para generar un baud rate de 9615 (tan sólo 0.16% de error)
     UART1->BDH = (sbr >> 8) & 0x1F;
     UART1->BDL = sbr & 0xFF;
     UART1->C1  = 0;
