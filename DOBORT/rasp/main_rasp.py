@@ -1,4 +1,5 @@
 import cv2
+from h11 import IDLE
 import numpy as np
 import RPi.GPIO as GPIO
 import time
@@ -54,23 +55,20 @@ lower_blue   = np.array([100, 100, 100]); upper_blue   = np.array([140, 255, 255
 lower_yellow = np.array([10,  100, 100]); upper_yellow = np.array([25,  255, 255])
 
 # Estados
-IDLE       = "IDLE"
-DETECTANDO = "DETECTANDO" #la cámara detecta qué paquete y qué color, para modo acomodar
-DECIDIENDO = "DECIDIENDO"
-RUNNING    = "RUNNING"
-RECIBIR    = "RECIBIR"
-ESPERANDO_RE = "ESPERANDO_RE" #espera la señal R1-R6 para decidir qué rutina ejecutar, para modo recibir
+ESPERANDO_RE = "ESPERANDO_RE"
+DETECTANDO   = "DETECTANDO"
+DECIDIENDO   = "DECIDIENDO"
+RUNNING      = "RUNNING"
 
-estado         = IDLE
-color_paquete  = None
-rutina_elegida = None
-modo_actual    = None   # "ACOMODAR" | "RECIBIR"
-posicion_pendiente = None #Para guardar el valor de R1-R6 que llega antes de decidir el modo, para no perder esa información si llega antes de tiempo
-
-FRAMES_THRESHOLD  = 20
-contador_conf     = 0
-color_candidato   = None
-
+estado             = IDLE
+modo_actual        = None
+color_paquete      = None
+rutina_elegida     = None
+posicion_pendiente = None
+FRAMES_THRESHOLD   = 20
+contador_conf      = 0
+color_candidato    = None
+color_detectado    = "NONE"
 bt_queue = queue.Queue()
 
 # Bluetooth -------------------------------------------------------------------
@@ -244,11 +242,11 @@ print("Esperando señal BT...")
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
 roi          = None
-color_detectado = "NONE"
+
 while True:
     ret, frame = cap.read()
     if ret and frame is not None:
-        color_detectado, roi            = detectar_color(frame)
+        color_detectado, roi = detectar_color(frame)
     else:
         time.sleep(0.05)
         continue
@@ -265,7 +263,7 @@ while True:
 
         elif señal in ("R1","R2","R3","R4","R5","R6"):
             if estado != IDLE:
-                print(f"{señal} ignorado, estado: {estado}")
+                print(f"[WARN] {señal} ignorado, estado: {estado}")
                 continue
             numero        = int(señal[1])
             rutina_valida = verificar_rutina_recibir(numero)
@@ -275,17 +273,18 @@ while True:
                 rutina_elegida     = rutina_valida
                 modo_actual        = "RECIBIR"
                 estado             = ESPERANDO_RE
-                print(f"Casilla {numero} ocupada → esperando RE")
+                print(f"[SYS] Casilla {numero} ocupada → esperando RE")
             else:
                 bt_send("master", 'M', 'N')
-                print(f"Casilla {numero} vacía")
+                print(f"[SYS] Casilla {numero} vacía")
 
         elif señal == "RE":
             if estado == ESPERANDO_RE:
-                print(f"RE recibido → ejecutando rutina {rutina_elegida}")
+                print(f"[SYS] RE recibido → mandando KUB al carro")
+                bt_send("carro", "KUB")
                 estado = RUNNING
             else:
-                print(f"RE ignorado, estado: {estado}")
+                print(f"[WARN] RE ignorado, estado: {estado}")
 
     # Máquina de estados ------------------------------------------------------
     if estado == DETECTANDO: #sólo llamamod a detectando cuando el modo es acomodar, porque ahí es cuando la cámara tiene que detectar el color del paquete para decidir la rutina. En recibir no importa el color, sólo la posición del MASTER
@@ -308,23 +307,28 @@ while True:
     elif estado == DECIDIENDO: #decide qué rutina usar para acomodar, dependiendo del color detectado. Si el modo es recibir, no se decide rutina, se espera la señal R1-R6 para decidir la rutina
         rutina_elegida = decidir_rutina_acomodar(color_paquete)
         if rutina_elegida is not None:
-            print(f"[SYS] Slot libre → rutina {rutina_elegida}")
+            print(f"Slot libre → rutina {rutina_elegida}")
+            bt_send("carro", "KUB")
             estado = RUNNING
         else:
-            print("[SYS] Sin espacio → ME al MASTER")
+            print("Sin espacio → ME al MASTER")
             bt_send("master", 'M', 'E')
             color_paquete = None
             modo_actual   = None
             estado        = IDLE
 
     elif estado == RUNNING:
-        print(f"[SYS] Ejecutando rutina {rutina_elegida} | Modo: {modo_actual}")
+        print(f"Ejecutando rutina {rutina_elegida} | Modo: {modo_actual}")
         ok = ejecutar_rutina_dobot(robot, rutina_elegida)
         if ok:
             if modo_actual == "ACOMODAR":
                 bt_send("master", 'M', 'L')
+                bt_send("carro", "KBU")
+                print("Paquete depositado → mandando KBU al carro")
             elif modo_actual == "RECIBIR":
                 bt_send("master", 'M', 'R')
+                bt_send("carro", "KBU")
+                print("Paquete recogido → mandando KBU al carro")
         else:
             print("Rutina falló")
         rutina_elegida     = None
@@ -336,12 +340,17 @@ while True:
         print("IDLE")
 
     # 4. UI 
-    if roi is not None:
-        cv2.putText(roi, f"Estado: {estado} | Modo: {modo_actual}",
-                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,255,255), 2)
-        cv2.putText(roi, f"Color: {color_detectado} | Cand: {color_candidato} x{contador_conf}",
-                    (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200,200,0), 2)
-        cv2.imshow("Deteccion", roi)
+    if frame is not None:
+        h, w, _ = frame.shape
+        roi_y = h // 2
+        cv2.rectangle(frame, (0, 0), (w, roi_y), (224, 150, 211), 2)
+        cv2.putText(frame, "ROI color", (5, 20),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (224, 150, 211), 1)
+        cv2.putText(frame, f"Estado: {estado} | Modo: {modo_actual}",
+                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        cv2.putText(frame, f"Color: {color_detectado} | Cand: {color_candidato} x{contador_conf}",
+                    (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 0), 2)
+        cv2.imshow("Deteccion", frame)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
