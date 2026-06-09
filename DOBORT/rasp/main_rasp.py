@@ -56,6 +56,7 @@ lower_yellow = np.array([10,  100, 100]); upper_yellow = np.array([25,  255, 255
 # Estados
 IDLE = "IDLE"
 ESPERANDO_RE = "ESPERANDO_RE"
+ESPERANDO_RL = "ESPERANDO_RL"
 DETECTANDO   = "DETECTANDO"
 DECIDIENDO   = "DECIDIENDO"
 RUNNING      = "RUNNING"
@@ -252,15 +253,16 @@ while True:
         continue
 
     # Señales BT -------------------------------------------------------------
+    # Señales BT Master
     while not bt_queue_master.empty():
         señal = bt_queue_master.get()
-        print(f"Señal recibida: '{señal}' | Estado: {estado}")
-
-        if señal == "RL" and estado == IDLE: #RL es para acomodar, RE es para recibir
+        print(f"[BT MASTER] '{señal}' | Estado: {estado}")
+    
+        if señal == "RL" and estado == IDLE:
             modo_actual = "ACOMODAR"
             estado      = DETECTANDO
-            print("Modo ACOMODAR →cámara detectando color del paquete")
-
+            print("[SYS] Modo ACOMODAR → detectando color")
+    
         elif señal in ("R1","R2","R3","R4","R5","R6"):
             if estado != IDLE:
                 print(f"[WARN] {señal} ignorado, estado: {estado}")
@@ -277,14 +279,33 @@ while True:
             else:
                 bt_send("master", 'M', 'N')
                 print(f"[SYS] Casilla {numero} vacía")
-
+    
         elif señal == "RE":
             if estado == ESPERANDO_RE:
                 print(f"[SYS] RE recibido → mandando KUB al carro")
                 bt_send("carro", "KUB")
-                estado = RUNNING
+                estado = ESPERANDO_RL  # ← espera confirmación del carro
             else:
                 print(f"[WARN] RE ignorado, estado: {estado}")
+    
+    # Señales BT Carro  ← este loop faltaba
+    while not bt_queue_carro.empty():
+        señal = bt_queue_carro.get()
+        print(f"[BT CARRO] '{señal}' | Estado: {estado}")
+    
+        if señal == "RL":  # carro llegó al brazo → ejecutar rutina
+            if estado == ESPERANDO_RL:
+                print("[SYS] Carro listo → ejecutando rutina")
+                estado = RUNNING
+            else:
+                print(f"[WARN] RL ignorado, estado: {estado}")
+    
+        elif señal == "RR":  # carro llegó al usuario → avisar al master
+            print("[SYS] Carro en usuario → avisando master")
+            bt_send("master", 'M', 'L' if modo_actual == "ACOMODAR" else 'R')
+            estado = IDLE
+            print("[SYS] → IDLE")
+            
 
     # Máquina de estados ------------------------------------------------------
     if estado == DETECTANDO: #sólo llamamod a detectando cuando el modo es acomodar, porque ahí es cuando la cámara tiene que detectar el color del paquete para decidir la rutina. En recibir no importa el color, sólo la posición del MASTER
@@ -316,28 +337,21 @@ while True:
             color_paquete = None
             modo_actual   = None
             estado        = IDLE
-
+            
     elif estado == RUNNING:
-        print(f"Ejecutando rutina {rutina_elegida} | Modo: {modo_actual}")
+        print(f"[SYS] Ejecutando rutina {rutina_elegida} | Modo: {modo_actual}")
         ok = ejecutar_rutina_dobot(robot, rutina_elegida)
         if ok:
-            if modo_actual == "ACOMODAR":
-                bt_send("master", 'M', 'L')
-                bt_send("carro", "KBU")
-                print("Paquete depositado → mandando KBU al carro")
-            elif modo_actual == "RECIBIR":
-                bt_send("master", 'M', 'R')
-                bt_send("carro", "KBU")
-                print("Paquete recogido → mandando KBU al carro")
+            bt_send("carro", "KBU")  # solo manda KBU, master se avisa cuando llega RR
+            print("[SYS] Rutina ok → mandando KBU, esperando RR")
         else:
-            print("Rutina falló")
+            print("[SYS] Rutina falló → IDLE")
+            estado = IDLE
         rutina_elegida     = None
         color_paquete      = None
-        modo_actual        = None
         posicion_pendiente = None
         color_detectado    = "NONE"
-        estado             = IDLE
-        print("IDLE")
+        # modo_actual NO se limpia aquí, lo necesita el manejador de RR
 
     # 4. UI 
     if frame is not None:
