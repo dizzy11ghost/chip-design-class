@@ -80,7 +80,6 @@ IDLE         = "IDLE"
 DETECTANDO   = "DETECTANDO"    # visión detectando color (ACOMODAR)
 DECIDIENDO   = "DECIDIENDO"    # decidiendo rutina según color (ACOMODAR)
 ESPERANDO_RL = "ESPERANDO_RL"  # KUB mandado, esperando RL del carro
-ESPERANDO_RE = "ESPERANDO_RE"  # R1-R6 recibido, esperando RE del carro (RECIBIR)
 RUNNING      = "RUNNING"       # ejecutando rutina Dobot
 ESPERANDO_RR = "ESPERANDO_RR"  # KBU mandado, esperando RR del carro
 
@@ -114,9 +113,6 @@ def detectar_color(frame):
     dominante = max(areas, key=areas.get)
     return (dominante if areas[dominante] > 500 else "NONE"), roi
 
-def leer_ft(nombre):
-    return GPIO.input(PINES_FT[nombre]) if nombre in PINES_FT else 0
-
 def decidir_rutina_acomodar(color):
     slots = {
         "ROJO":     [("ft1", 7),  ("ft4", 10)],
@@ -131,7 +127,7 @@ def decidir_rutina_acomodar(color):
     return None
 
 def verificar_rutina_recibir(numero):
-    ft_por_rutina = {1:"ft1", 2:"ft2", 3:"ft3", 4:"ft4", 5:"ft5", 6:"ft6"}
+    ft_por_rutina = {1: "ft1", 2: "ft2", 3: "ft3", 4: "ft4", 5: "ft5", 6: "ft6"}
     ft_nombre = ft_por_rutina.get(numero)
     if ft_nombre is None:
         return None
@@ -258,37 +254,37 @@ while True:
         print(f"[BT MASTER] '{señal}' | Estado: {estado}")
 
         # ── MODO ACOMODAR ─────────────────────────────────────────────────────
-        # La KLc manda RL para indicar que hay un paquete esperando ser acomodado
-        if señal == "RL" and estado == IDLE:
+        # Master manda RS para indicar que hay un paquete esperando ser acomodado
+        if señal == "RS" and estado == IDLE:
             modo_actual = "ACOMODAR"
             estado      = DETECTANDO
             print("[SYS] ACOMODAR → analizando color del paquete")
 
         # ── MODO RECIBIR ──────────────────────────────────────────────────────
-        # La KLp manda R1-R6 indicando qué paquete quiere retirar
-       elif señal in ("R1","R2","R3","R4","R5","R6") and estado == IDLE:
-        numero        = int(señal[1])
-        rutina_valida = verificar_rutina_recibir(numero)
-        if rutina_valida is not None:
-            bt_send("master", 'M', 'S')
-            rutina_elegida     = rutina_valida
-            posicion_pendiente = numero
-            modo_actual        = "RECIBIR"
-            bt_send("carro", "KUB")
-            estado = ESPERANDO_RL   # ← directo, sin pasar por DECIDIENDO
-            print(f"[SYS] Casilla {numero} ocupada → KUB enviado")
-        else:
-            bt_send("master", 'M', 'N')
-            print(f"[SYS] Casilla {numero} vacía")
+        # Master manda R1-R6 indicando qué paquete quiere retirar
+        elif señal in ("R1", "R2", "R3", "R4", "R5", "R6") and estado == IDLE:
+            numero        = int(señal[1])
+            rutina_valida = verificar_rutina_recibir(numero)
+            if rutina_valida is not None:
+                bt_send("master", 'M', 'S')
+                rutina_elegida     = rutina_valida
+                posicion_pendiente = numero
+                modo_actual        = "RECIBIR"
+                bt_send("carro", "KUB")
+                estado = ESPERANDO_RL
+                print(f"[SYS] Casilla {numero} ocupada → KUB enviado, esperando RL")
+            else:
+                bt_send("master", 'M', 'N')
+                print(f"[SYS] Casilla {numero} vacía → MN al master")
 
     # 3. Señales BT Carro ─────────────────────────────────────────────────────
     while not bt_queue_carro.empty():
         señal = bt_queue_carro.get()
         print(f"[BT CARRO] '{señal}' | Estado: {estado}")
 
-        # RL → carro llegó al brazo y está listo (ACOMODAR)
+        # RL → carro llegó al brazo y está listo
         if señal == "RL" and estado == ESPERANDO_RL:
-            print("[SYS] Carro listo en brazo → ejecutando rutina ACOMODAR")
+            print("[SYS] Carro listo en brazo → ejecutando rutina")
             estado = RUNNING
 
         # RR → carro llegó al usuario, avisar al master según el modo
@@ -311,6 +307,7 @@ while True:
             print(f"[WARN] '{señal}' del carro ignorado en estado {estado}")
 
     # 4. Máquina de estados ───────────────────────────────────────────────────
+
     if estado == DETECTANDO:
         if color_detectado != "NONE":
             if color_detectado == color_candidato:
@@ -328,24 +325,29 @@ while True:
             color_candidato = None
             contador_conf   = 0
 
-   elif estado == DECIDIENDO and modo_actual == "ACOMODAR":
-    rutina_elegida = decidir_rutina_acomodar(color_paquete)
-    if rutina_elegida is not None:
-        print(f"[SYS] Slot libre → rutina {rutina_elegida} | KUB al carro")
-        bt_send("carro", "KUB")
-        estado = ESPERANDO_RL
-    else:
-        print("[SYS] Sin espacio → ME al master")
-        bt_send("master", 'M', 'E')
-        color_paquete = None
-        modo_actual   = None
-        estado        = IDLE
+    elif estado == DECIDIENDO and modo_actual == "ACOMODAR":
+        rutina_elegida = decidir_rutina_acomodar(color_paquete)
+        if rutina_elegida is not None:
+            print(f"[SYS] Slot libre → rutina {rutina_elegida} | KUB al carro")
+            bt_send("carro", "KUB")
+            estado = ESPERANDO_RL
+        else:
+            print("[SYS] Sin espacio → ME al master")
+            bt_send("master", 'M', 'E')
+            color_paquete = None
+            modo_actual   = None
+            estado        = IDLE
 
     elif estado == RUNNING:
         print(f"[SYS] Ejecutando rutina {rutina_elegida} | Modo: {modo_actual}")
         ok = ejecutar_rutina_dobot(robot, rutina_elegida)
         if ok:
-            print(f"[SYS] Rutina ok → KBU al carro")
+            if modo_actual == "ACOMODAR":
+                bt_send("master", 'M', 'L')
+                print("[SYS] Rutina ACOMODAR ok → ML al master | KBU al carro")
+            elif modo_actual == "RECIBIR":
+                bt_send("master", 'M', 'R')
+                print("[SYS] Rutina RECIBIR ok → MR al master | KBU al carro")
             bt_send("carro", "KBU")
             estado = ESPERANDO_RR
         else:
