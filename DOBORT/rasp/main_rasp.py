@@ -1,5 +1,4 @@
 import cv2
-from h11 import IDLE
 import numpy as np
 import RPi.GPIO as GPIO
 import time
@@ -55,6 +54,7 @@ lower_blue   = np.array([100, 100, 100]); upper_blue   = np.array([140, 255, 255
 lower_yellow = np.array([10,  100, 100]); upper_yellow = np.array([25,  255, 255])
 
 # Estados
+IDLE = "IDLE"
 ESPERANDO_RE = "ESPERANDO_RE"
 DETECTANDO   = "DETECTANDO"
 DECIDIENDO   = "DECIDIENDO"
