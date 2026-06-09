@@ -275,9 +275,8 @@ while True:
                 rutina_elegida     = rutina_valida
                 posicion_pendiente = numero
                 modo_actual        = "RECIBIR"
-                bt_send("carro", "KUB")
-                estado = ESPERANDO_RE
-                print(f"[SYS] Casilla {numero} ocupada → KUB enviado, esperando RE")
+                estado = DECIDIENDO
+                print(f"[SYS] Casilla {numero} ocupada → KUB enviado, esperando Rl")
             else:
                 bt_send("master", 'M', 'N')
                 print(f"[SYS] Casilla {numero} vacía → MN enviado")
@@ -291,13 +290,8 @@ while True:
         señal = bt_queue_carro.get()
         print(f"[BT CARRO] '{señal}' | Estado: {estado}")
 
-        # RE → carro llegó al brazo y está listo para recibir paquete (RECIBIR)
-        if señal == "RE" and estado == ESPERANDO_RE:
-            print("[SYS] Carro listo en brazo → ejecutando rutina RECIBIR")
-            estado = RUNNING
-
         # RL → carro llegó al brazo y está listo (ACOMODAR)
-        elif señal == "RL" and estado == ESPERANDO_RL:
+        if señal == "RL" and estado == ESPERANDO_RL:
             print("[SYS] Carro listo en brazo → ejecutando rutina ACOMODAR")
             estado = RUNNING
 
@@ -343,6 +337,7 @@ while True:
         if rutina_elegida is not None:
             print(f"[SYS] Slot libre → rutina {rutina_elegida} | KUB al carro")
             bt_send("carro", "KUB")
+            EST
             estado = ESPERANDO_RL
         else:
             print("[SYS] Sin espacio → ME al master")
