@@ -266,24 +266,20 @@ while True:
 
         # ── MODO RECIBIR ──────────────────────────────────────────────────────
         # La KLp manda R1-R6 indicando qué paquete quiere retirar
-        elif señal in ("R1","R2","R3","R4","R5","R6") and estado == IDLE:
-            numero        = int(señal[1])
-            rutina_valida = verificar_rutina_recibir(numero)
-            if rutina_valida is not None:
-                # Hay paquete → mandamos KUB al carro para que vaya al brazo
-                bt_send("master", 'M', 'S')
-                rutina_elegida     = rutina_valida
-                posicion_pendiente = numero
-                modo_actual        = "RECIBIR"
-                estado = DECIDIENDO
-                print(f"[SYS] Casilla {numero} ocupada → KUB enviado, esperando Rl")
-            else:
-                bt_send("master", 'M', 'N')
-                print(f"[SYS] Casilla {numero} vacía → MN enviado")
-
+       elif señal in ("R1","R2","R3","R4","R5","R6") and estado == IDLE:
+        numero        = int(señal[1])
+        rutina_valida = verificar_rutina_recibir(numero)
+        if rutina_valida is not None:
+            bt_send("master", 'M', 'S')
+            rutina_elegida     = rutina_valida
+            posicion_pendiente = numero
+            modo_actual        = "RECIBIR"
+            bt_send("carro", "KUB")
+            estado = ESPERANDO_RL   # ← directo, sin pasar por DECIDIENDO
+            print(f"[SYS] Casilla {numero} ocupada → KUB enviado")
         else:
-            if estado != IDLE:
-                print(f"[WARN] '{señal}' ignorado en estado {estado}")
+            bt_send("master", 'M', 'N')
+            print(f"[SYS] Casilla {numero} vacía")
 
     # 3. Señales BT Carro ─────────────────────────────────────────────────────
     while not bt_queue_carro.empty():
@@ -332,19 +328,18 @@ while True:
             color_candidato = None
             contador_conf   = 0
 
-    elif estado == DECIDIENDO:
-        rutina_elegida = decidir_rutina_acomodar(color_paquete)
-        if rutina_elegida is not None:
-            print(f"[SYS] Slot libre → rutina {rutina_elegida} | KUB al carro")
-            bt_send("carro", "KUB")
-            EST
-            estado = ESPERANDO_RL
-        else:
-            print("[SYS] Sin espacio → ME al master")
-            bt_send("master", 'M', 'E')
-            color_paquete = None
-            modo_actual   = None
-            estado        = IDLE
+   elif estado == DECIDIENDO and modo_actual == "ACOMODAR":
+    rutina_elegida = decidir_rutina_acomodar(color_paquete)
+    if rutina_elegida is not None:
+        print(f"[SYS] Slot libre → rutina {rutina_elegida} | KUB al carro")
+        bt_send("carro", "KUB")
+        estado = ESPERANDO_RL
+    else:
+        print("[SYS] Sin espacio → ME al master")
+        bt_send("master", 'M', 'E')
+        color_paquete = None
+        modo_actual   = None
+        estado        = IDLE
 
     elif estado == RUNNING:
         print(f"[SYS] Ejecutando rutina {rutina_elegida} | Modo: {modo_actual}")
