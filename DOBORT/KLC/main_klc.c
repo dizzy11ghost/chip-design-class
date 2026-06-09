@@ -1,52 +1,201 @@
 #include "MKL25Z4.h"
-#include <stdlib.h> // Para la función atoi
+#include <stdio.h>
 
-void LED_init(void);
-void LED_set(int rojo, int verde, int azul);
-void UART0_init(uint32_t baud);
-char UART0_receive_char(void);
-char UART0_check_rx(void);
+#define PWM_MAX_VAL       4800
+#define PWM_MAX_CORR      4800
+#define PWM_BASE          4560
+#define PWM_MIN           4320
+#define PULSOS_POR_CM     12.78f
+#define KP                1
+
+volatile uint32_t pulsosIzq = 0;
+volatile uint32_t pulsosDer = 0;
+
+uint8_t estadoAntIzq = 0;
+uint8_t estadoAntDer = 0;
+
 void delay_ms(uint32_t ms);
-
-void MOTORES_init(void);
+void Motor_Init(void);
 void PWM_init(void);
-void motores_avanzar(uint16_t velocidad_motor_1, uint16_t velocidad_motor_2);
-void motores_reversa(uint16_t velocidad_motor_1, uint16_t velocidad_motor_2);
-void motores_detener(void);
+void PWM_Set(uint16_t pwmDer, uint16_t pwmIzq);
+void Encoder_Init(void);
+void Motores_Adelante(void);
+void Motores_Stop(void);
+void Actualizar_Encoders(void);
+void Mover_Distancia(float cm, uint8_t reversa);
+void UART0_init(uint32_t baud);
+void UART0_SendChar(char c);
+void UART0_SendStr(const char *str);
+uint8_t UART0_RecvChar(char *c);
+void UART0_RecvCmd(char *buf, uint8_t len);
+void Procesar_Comando(char *cmd);
 
-#define LOOPS_PER_MS  2400UL
+int main(void)
+{
+	Motor_Init();
+	PWM_init();
+	Encoder_Init();
+	UART0_init(9600);
 
-// Definición de estados del Carrito
-typedef enum {
-    ESPERANDO_COMANDO,
-    AVANZANDO,
-    REVERSA
-} EstadoCarrito;
+	char cmd[3];
+
+    while(1) {
+    	UART0_RecvCmd(cmd, 3);
+    	Procesar_Comando(cmd);
+    }
+
+    return 0;
+}
 
 void delay_ms(uint32_t ms) {
-    for (uint32_t i = 0; i < ms * LOOPS_PER_MS; i++) {
+    for (uint32_t i = 0; i < ms * 2400UL; i++)
         __asm volatile ("nop");
+}
+
+void Motor_Init(void)
+{
+    SIM->SCGC5 |= SIM_SCGC5_PORTC_MASK;
+
+    PORTC->PCR[0] = PORT_PCR_MUX(1);
+    PORTC->PCR[1] = PORT_PCR_MUX(1);
+    PORTC->PCR[2] = PORT_PCR_MUX(1);
+    PORTC->PCR[3] = PORT_PCR_MUX(1);
+
+    GPIOC->PDDR |= (1<<0)|(1<<1)|(1<<2)|(1<<3);
+}
+
+void PWM_init(void)
+{
+    SIM->SCGC5 |= SIM_SCGC5_PORTB_MASK;
+
+    PORTB->PCR[0] = PORT_PCR_MUX(3);   // Motor derecho
+    PORTB->PCR[1] = PORT_PCR_MUX(3);   // Motor izquierdo
+
+    SIM->SCGC6 |= SIM_SCGC6_TPM1_MASK;
+    SIM->SOPT2  |= SIM_SOPT2_TPMSRC(1);
+    SIM->SOPT4  &= ~SIM_SOPT4_TPM1CH0SRC_MASK;
+
+    TPM1->SC = 0;
+    TPM1->MOD = PWM_MAX_VAL;
+
+    TPM1->CONTROLS[0].CnSC = TPM_CnSC_MSB_MASK | TPM_CnSC_ELSB_MASK;
+    TPM1->CONTROLS[1].CnSC = TPM_CnSC_MSB_MASK | TPM_CnSC_ELSB_MASK;
+
+    TPM1->CONTROLS[0].CnV = 0;
+    TPM1->CONTROLS[1].CnV = 0;
+
+    TPM1->SC = TPM_SC_CMOD(1);
+}
+
+void PWM_Set(uint16_t pwmDer, uint16_t pwmIzq)
+{
+    TPM1->CONTROLS[0].CnV = pwmDer;
+    TPM1->CONTROLS[1].CnV = pwmIzq;
+}
+
+void Encoder_Init(void)
+{
+    SIM->SCGC5 |= SIM_SCGC5_PORTE_MASK;
+
+    PORTE->PCR[20] = PORT_PCR_MUX(1) | PORT_PCR_PE_MASK | PORT_PCR_PS_MASK;
+    PORTE->PCR[21] = PORT_PCR_MUX(1) | PORT_PCR_PE_MASK | PORT_PCR_PS_MASK;
+
+    GPIOE->PDDR &= ~((1<<20)|(1<<21));
+
+    estadoAntIzq = (GPIOE->PDIR >> 20) & 1;
+    estadoAntDer = (GPIOE->PDIR >> 21) & 1;
+}
+
+void Motores_Adelante(void)
+{
+    // Izquierdo adelante
+    GPIOC->PCOR = (1<<0);
+    GPIOC->PSOR = (1<<1);
+
+    // Derecho adelante
+    GPIOC->PCOR = (1<<2);
+    GPIOC->PSOR = (1<<3);
+}
+
+void Motores_Atras(void)
+{
+    // Izquierdo reversa
+    GPIOC->PSOR = (1<<0);
+    GPIOC->PCOR = (1<<1);
+
+    // Derecho reversa
+    GPIOC->PSOR = (1<<2);
+    GPIOC->PCOR = (1<<3);
+}
+
+void Motores_Stop(void)
+{
+    PWM_Set(0, 0);
+    GPIOC->PCOR = (1<<0)|(1<<1)|(1<<2)|(1<<3);
+}
+
+void Actualizar_Encoders(void)
+{
+    uint8_t estadoIzq = (GPIOE->PDIR >> 20) & 1;
+    uint8_t estadoDer = (GPIOE->PDIR >> 21) & 1;
+
+    if(estadoIzq != estadoAntIzq) { pulsosIzq++; estadoAntIzq = estadoIzq; }
+    if(estadoDer != estadoAntDer) { pulsosDer++; estadoAntDer = estadoDer; }
+}
+
+void Mover_Distancia(float cm, uint8_t reversa)
+{
+    uint32_t objetivo = (uint32_t)(cm * PULSOS_POR_CM);
+
+    pulsosIzq = 0;
+    pulsosDer = 0;
+
+    estadoAntIzq = (GPIOE->PDIR >> 20) & 1;
+    estadoAntDer = (GPIOE->PDIR >> 21) & 1;
+
+    if(reversa)
+        Motores_Atras();
+    else
+        Motores_Adelante();
+
+    PWM_Set(PWM_BASE, PWM_BASE);
+
+    while(1)
+    {
+        Actualizar_Encoders();
+
+        uint32_t promedio = (pulsosIzq + pulsosDer) / 2;
+
+        int32_t error = (int32_t)pulsosIzq - (int32_t)pulsosDer;
+
+        int32_t pwmIzq, pwmDer;
+
+        if(error > 2 || error < -2)
+        {
+            pwmIzq = PWM_BASE - error * KP;
+            pwmDer = PWM_BASE + error * KP;
+        }
+        else
+        {
+            pwmIzq = PWM_BASE;
+            pwmDer = PWM_BASE;
+        }
+
+        if(pwmIzq > PWM_MAX_CORR) pwmIzq = PWM_MAX_CORR;
+        if(pwmDer > PWM_MAX_CORR) pwmDer = PWM_MAX_CORR;
+        if(pwmIzq < PWM_MIN)      pwmIzq = PWM_MIN;
+        if(pwmDer < PWM_MIN)      pwmDer = PWM_MIN;
+
+        PWM_Set((uint16_t)pwmDer, (uint16_t)pwmIzq);
+
+        if(promedio >= objetivo)
+        {
+            Motores_Stop();
+            break;
+        }
     }
 }
 
-void LED_init(void) {
-    SIM->SCGC5 |= SIM_SCGC5_PORTB_MASK | SIM_SCGC5_PORTD_MASK;
-    PORTB->PCR[18] = PORT_PCR_MUX(1); // LED Rojo
-    PORTB->PCR[19] = PORT_PCR_MUX(1); // LED Verde
-    PORTD->PCR[1]  = PORT_PCR_MUX(1); // LED Azul
-    PTB->PDDR |= (1<<18) | (1<<19);
-    PTD->PDDR |= (1<<1);
-    PTB->PSOR  = (1<<18) | (1<<19);   // Apagados
-    PTD->PSOR  = (1<<1);
-}
-
-void LED_set(int rojo, int verde, int azul) {
-    if (rojo)  PTB->PCOR = (1<<18); else PTB->PSOR = (1<<18);
-    if (verde) PTB->PCOR = (1<<19); else PTB->PSOR = (1<<19);
-    if (azul)  PTD->PCOR = (1<<1);  else PTD->PSOR = (1<<1);
-}
-
-// Se mantiene tu configuración original de UART0
 void UART0_init(uint32_t baud) {
     MCG->C4 |= MCG_C4_DMX32_MASK;
     MCG->C4  = (MCG->C4 & ~MCG_C4_DRST_DRS_MASK) | MCG_C4_DRST_DRS(1);
@@ -57,135 +206,57 @@ void UART0_init(uint32_t baud) {
     PORTA->PCR[1] = PORT_PCR_MUX(2);
     PORTA->PCR[2] = PORT_PCR_MUX(2);
     UART0->C2 = 0;
-    uint16_t sbr = 48000000 / (16 * baud);
-    UART0->BDH = (sbr >> 8) & 0x1F;
-    UART0->BDL =  sbr & 0xFF;
+    uint16_t sbr = 48000000u / (16u * baud);
+    UART0->BDH = (uint8_t)((sbr >> 8) & 0x1F);
+    UART0->BDL = (uint8_t)(sbr & 0xFF);
     UART0->C4  = 0x0F;
     UART0->C1  = 0;
     UART0->C2  = UART0_C2_TE_MASK | UART0_C2_RE_MASK;
 }
 
-char UART0_receive_char(void) {
-    while (!(UART0->S1 & UART0_S1_RDRF_MASK));
-    return UART0->D;
+void UART0_SendChar(char c)
+{
+    while(!(UART0->S1 & UART0_S1_TDRE_MASK));
+    UART0->D = c;
 }
 
-// Verifica si hay datos listos en la UART0 sin bloquear el código
-char UART0_check_rx(void) {
-    if (UART0->S1 & UART0_S1_RDRF_MASK)
-        return UART0->D;
+void UART0_SendStr(const char *str)
+{
+    while(*str)
+        UART0_SendChar(*str++);
+}
+
+uint8_t UART0_RecvChar(char *c)
+{
+    if(UART0->S1 & UART0_S1_RDRF_MASK)
+    {
+        *c = UART0->D;
+        return 1;
+    }
     return 0;
 }
 
-void MOTORES_init(void) {
-    SIM->SCGC5 |= SIM_SCGC5_PORTC_MASK;
-    PORTC->PCR[0] = PORT_PCR_MUX(1); // IN1 -> PTC0
-    PORTC->PCR[1] = PORT_PCR_MUX(1); // IN2 -> PTC1
-    PORTC->PCR[2] = PORT_PCR_MUX(1); // IN3 -> PTC2
-    PORTC->PCR[3] = PORT_PCR_MUX(1); // IN4 -> PTC3
-    PTC->PDDR |= (1<<0) | (1<<1) | (1<<2) | (1<<3);
-    PTC->PCOR = (1<<0) | (1<<1) | (1<<2) | (1<<3);
+void UART0_RecvCmd(char *buf, uint8_t len)
+{
+    for(uint8_t i = 0; i < len; i++)
+    {
+        while(!(UART0->S1 & UART0_S1_RDRF_MASK));
+        buf[i] = UART0->D;
+    }
 }
 
-void PWM_init(void) {
-    SIM->SCGC5 |= SIM_SCGC5_PORTB_MASK;
-    PORTB->PCR[0] = PORT_PCR_MUX(3); // PTB0 -> TPM1_CH0 (ENA)
-    PORTB->PCR[1] = PORT_PCR_MUX(3); // PTB1 -> TPM1_CH1 (ENB)
-
-    SIM->SCGC6 |= SIM_SCGC6_TPM1_MASK;
-    SIM->SOPT2 |= SIM_SOPT2_TPMSRC(1);
-
-    TPM1->SC = 0;
-    TPM1->CONTROLS[0].CnSC = TPM_CnSC_MSB_MASK | TPM_CnSC_ELSB_MASK;
-    TPM1->CONTROLS[1].CnSC = TPM_CnSC_MSB_MASK | TPM_CnSC_ELSB_MASK;
-
-    TPM1->MOD = 4800;
-    TPM1->CONTROLS[0].CnV = 0;
-    TPM1->CONTROLS[1].CnV = 0;
-
-    TPM1->SC = TPM_SC_CMOD(1) | TPM_SC_PS(0);
-}
-
-void motores_avanzar(uint16_t velocidad_motor_1, uint16_t velocidad_motor_2) {
-    PTC->PSOR = (1<<0); // IN1 = 1
-    PTC->PCOR = (1<<1); // IN2 = 0
-    PTC->PSOR = (1<<2); // IN3 = 1
-    PTC->PCOR = (1<<3); // IN4 = 0
-    TPM1->CONTROLS[0].CnV = velocidad_motor_1;
-    TPM1->CONTROLS[1].CnV = velocidad_motor_2;
-}
-
-void motores_reversa(uint16_t velocidad_motor_1, uint16_t velocidad_motor_2) {
-    PTC->PCOR = (1<<0); // IN1 = 0
-    PTC->PSOR = (1<<1); // IN2 = 1
-    PTC->PCOR = (1<<2); // IN3 = 0
-    PTC->PSOR = (1<<3); // IN4 = 1
-    TPM1->CONTROLS[0].CnV = velocidad_motor_1;
-    TPM1->CONTROLS[1].CnV = velocidad_motor_2;
-}
-
-uint16_t porcentaje_a_pwm(uint8_t porcentaje) {
-    if (porcentaje > 100) porcentaje = 100;
-    return (TPM1->MOD * porcentaje) / 100;
-}
-
-void motores_detener(void) {
-    PTC->PCOR = (1<<0) | (1<<1) | (1<<2) | (1<<3);
-    TPM1->CONTROLS[0].CnV = 0;
-    TPM1->CONTROLS[1].CnV = 0;
-}
-
-int main(void) {
-    char buffer_rx[4] = {0};
-    int indice_rx = 0;
-
-    EstadoCarrito estadoActual = ESPERANDO_COMANDO;
-
-    UART0_init(9600);
-    LED_init();
-    MOTORES_init();
-    PWM_init();
-
-    uint16_t velocidad_motor_1 = porcentaje_a_pwm(80);
-    uint16_t velocidad_motor_2 = porcentaje_a_pwm(70);
-
-    while (1) {
-        char c = UART0_check_rx();
-
-        if (c != 0) {
-            buffer_rx[indice_rx] = c;
-            indice_rx++;
-
-            if (indice_rx == 3) {
-                buffer_rx[3] = '\0';
-
-                // KUB → Avanzar
-                if (buffer_rx[0] == 'K' && buffer_rx[1] == 'U' && buffer_rx[2] == 'B') {
-                    estadoActual = AVANZANDO;
-                    motores_avanzar(velocidad_motor_1, velocidad_motor_2);
-                }
-                // KBU → Reversa
-                else if (buffer_rx[0] == 'K' && buffer_rx[1] == 'B' && buffer_rx[2] == 'U') {
-                    estadoActual = REVERSA;
-                    motores_reversa(velocidad_motor_1, velocidad_motor_2);
-                }
-                // KST → Detener  ← NUEVO
-                else if (buffer_rx[0] == 'K' && buffer_rx[1] == 'S' && buffer_rx[2] == 'T') {
-                    motores_detener();
-                    estadoActual = ESPERANDO_COMANDO;
-                }
-
-                indice_rx = 0;
-            }
-        }
-
-        // LEDs según estado
-        if (estadoActual == ESPERANDO_COMANDO) {
-            LED_set(1, 0, 0); // Rojo
-        } else if (estadoActual == AVANZANDO) {
-            LED_set(0, 1, 0); // Verde
-        } else if (estadoActual == REVERSA) {
-            LED_set(0, 0, 1); // Azul
-        }
+void Procesar_Comando(char *cmd)
+{
+    // KUB → avanzar 70 cm
+    if(cmd[0]=='K' && cmd[1]=='U' && cmd[2]=='B')
+    {
+        Mover_Distancia(70, 0);
+        UART0_SendStr("RL");
+    }
+    // KBU → retroceder 70 cm
+    else if(cmd[0]=='K' && cmd[1]=='B' && cmd[2]=='U')
+    {
+        Mover_Distancia(70, 1);
+        UART0_SendStr("RR");
     }
 }
