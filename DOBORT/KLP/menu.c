@@ -1,5 +1,3 @@
-//KLPrincipal- Código para el sistema embebido de la FRDM KL25z encargada de la interfaz y master de comunicación
-//FreeRTOS para evitar superloops y separar responsabilidades entre tareas
 #include <MKL25Z4.h>
 #include "FreeRTOS.h"
 #include "task.h"
@@ -40,58 +38,75 @@ void flujo_mandar(void);
 void flujo_recibir(void);
 
 void PORTA_IRQHandler(void){
-	if(PORTA->ISFR & (1 << 13)){
-		PORTA->ISFR = (1 << 13);
-		BaseType_t xWoken = pdFALSE;
-		xSemaphoreGiveFromISR(sem_emergencia, &xWoken); //Despierta tarea_emergencia (friendly reminder, la ISR (Interruption service routine) debe ser corta)
-		portYIELD_FROM_ISR(xWoken); //Sin esperar al siguiente tick, ISR termina, cambia de contexto inmediatamente y la emergencia corre
-	}
+    if(PORTA->ISFR & (1 << 13)){
+        PORTA->ISFR = (1 << 13);
+        BaseType_t xWoken = pdFALSE;
+        xSemaphoreGiveFromISR(sem_emergencia, &xWoken);
+        portYIELD_FROM_ISR(xWoken);
+    }
 }
 
 void tarea_emergencia(void *pv){
-	while(1){
-		xSemaphoreTake(sem_emergencia, portMAX_DELAY);
-		LCD_command(0x01);
-		delayMs(4);
-		LCD_command(0x80);
-		LCD_string("Emergencia");
-		LCD_command(0xC0);
-		LCD_string("Sistema detenido");
-		while(1){}
-	}
+    while(1){
+        xSemaphoreTake(sem_emergencia, portMAX_DELAY);
+        LCD_command(0x01);
+        delayMs(4);
+        LCD_command(0x80);
+        LCD_string("Emergencia");
+        LCD_command(0xC0);
+        LCD_string("Sistema detenido");
+        while(1){}
+    }
 }
 
 void tarea_uart_rx(void *pv){
-	while(1){
-		while(!(UART1->S1 & UART_S1_RDRF_MASK)){
-			vTaskDelay(pdMS_TO_TICKS(1));
-		}
-		char c = UART1->D;
-		xQueueSend(uart_queue, &c, portMAX_DELAY);
-	}
+    while(1){
+        while(!(UART1->S1 & UART_S1_RDRF_MASK)){
+            vTaskDelay(pdMS_TO_TICKS(1));
+        }
+        char c = UART1->D;
+        xQueueSend(uart_queue, &c, portMAX_DELAY);
+    }
 }
 
 void tarea_ui(void *pv){
-	pantalla_bienvenida();
-	while(1){
-		menu_principal();
-	}
+    pantalla_bienvenida();
+    while(1){
+        menu_principal();
+    }
+}
+
+/* ── Tarea reset por tecla D ───────────────────────────────── */
+void tarea_reset(void *pv){
+    while(1){
+        int code = keypad_getkey();
+        if(code != 0){
+            delayMs(20);
+            char tecla = keymap[code - 1];
+            while(keypad_getkey() != 0){}
+            if(tecla == 'D'){
+                NVIC_SystemReset();
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
 }
 
 int main(void){
-	BOARD_InitBootClocks(); //deja core clock con 48MHz, bus clock con 24MHz y flash clock con 24MHZ
-	BOARD_InitPins(); 
-	TPM0_init(); //inicializamos clock de hardware
-	UART1_init(9600); 
-	LCD_init();
-	keypad_init();
-	uart_queue = xQueueCreate(10, sizeof(char)); //reservamos espacio en la queue para 10 caractéres
-	sem_emergencia =  xSemaphoreCreateBinary(); //semáforo binario 0: no hay emergencia 1: hay emergencia
-	xTaskCreate(tarea_emergencia, "EMG", 256, NULL, 3, NULL); //paro de emergencia, más alta prioridad
-	xTaskCreate(tarea_uart_rx, "URX", 256, NULL, 2, NULL); //mensajes bluetooth, para evitar que lleguen datos, no leerlos y que se pierdan, debe ejecutarse antes que interfaz
-	xTaskCreate(tarea_ui, "UI", 512, NULL, 1, NULL); //interfaz usuario, puede esperar
-	vTaskStartScheduler();
-	while(1){}
+    BOARD_InitBootClocks();
+    BOARD_InitPins();
+    TPM0_init();
+    UART1_init(9600);
+    LCD_init();
+    keypad_init();
+    uart_queue     = xQueueCreate(10, sizeof(char));
+    sem_emergencia = xSemaphoreCreateBinary();
+    xTaskCreate(tarea_emergencia, "EMG", 256, NULL, 3, NULL);
+    xTaskCreate(tarea_uart_rx,   "URX", 256, NULL, 2, NULL);
+    xTaskCreate(tarea_ui,        "UI",  512, NULL, 1, NULL);
+    xTaskCreate(tarea_reset,     "RST", 128, NULL, 4, NULL); /* prioridad más alta */
+    vTaskStartScheduler();
+    while(1){}
 }
 
 void pantalla_bienvenida(void) {
@@ -122,9 +137,9 @@ void menu_principal(void) {
         vTaskDelay(pdMS_TO_TICKS(10));
     }
     if (tecla == '1')
-    	flujo_mandar();
+        flujo_mandar();
     else
-    	flujo_recibir();
+        flujo_recibir();
 }
 
 void flujo_mandar(void) {
@@ -136,7 +151,7 @@ void flujo_mandar(void) {
     LCD_string("1. Ya lo puse");
     char tecla = 0;
     while (tecla != '1') {
-    	if (tecla == '#') return;
+        if (tecla == '#') return;
         int code = keypad_getkey();
         if (code != 0) {
             delayMs(20);
@@ -187,7 +202,7 @@ void flujo_recibir(void) {
         LCD_string("1-6: FT1-FT6");
         char tecla = 0;
         while (tecla < '1' || tecla > '6') {
-        	if (tecla == '#') return;
+            if (tecla == '#') return;
             int code = keypad_getkey();
             if (code != 0) {
                 delayMs(20);
@@ -235,14 +250,12 @@ void flujo_recibir(void) {
     }
 }
 
-void TPM0_init(void) { //temporizador de HardWare
-    SIM->SCGC6 |= SIM_SCGC6_TPM0_MASK; //SCGC: System Clock Gate Control, la KL apaga periféricos para ahorrar energía, hay que habilitarlos
-    SIM->SOPT2 |= SIM_SOPT2_TPMSRC(1); //la fuente de TPM, en este caso la src 1 da 48MHz
+void TPM0_init(void) {
+    SIM->SCGC6 |= SIM_SCGC6_TPM0_MASK;
+    SIM->SOPT2 |= SIM_SOPT2_TPMSRC(1);
     TPM0->SC  = 0; TPM0->CNT = 0;
-    TPM0->MOD = 3000 - 1; //3MHZ = 1ms
-    TPM0->SC  = TPM_SC_CMOD(1) | TPM_SC_PS(4) | TPM_SC_TOF_MASK; //prescaler: para poder adaptar la frecuencia del reloj del sistema y establecer 
-	//la tasa de interrupción del tick del kernel (núcleo de FreeRTOS), que determinará la precisión temporal y frecuencia del scheduler
-	//En este caso, queda de 3MHz
+    TPM0->MOD = 3000 - 1;
+    TPM0->SC  = TPM_SC_CMOD(1) | TPM_SC_PS(4) | TPM_SC_TOF_MASK;
 }
 
 void delayMs(int n) {
@@ -265,7 +278,7 @@ void delayUs(int n) {
 void UART1_init(uint32_t baud) {
     SIM->SCGC4 |= SIM_SCGC4_UART1_MASK;
     UART1->C2 = 0;
-    uint16_t sbr = 24000000 / (16 * baud); //por su Baud Rate, UART va a tomar el bus clock, para generar un baud rate de 9615 (tan sólo 0.16% de error)
+    uint16_t sbr = 24000000 / (16 * baud);
     UART1->BDH = (sbr >> 8) & 0x1F;
     UART1->BDL = sbr & 0xFF;
     UART1->C1  = 0;
@@ -317,7 +330,7 @@ char get_key_pressed(void) {
     while (keypad_getkey() != 0) {}
     delayMs(20);
     do {
-    	code = keypad_getkey();
+        code = keypad_getkey();
     }
     while (code == 0);
     delayMs(20);
@@ -336,9 +349,9 @@ void LCD_command(unsigned char command) {
     PTA->PCOR = EN;
     delayMs(1);
     if (command < 4)
-    	delayMs(4);
+        delayMs(4);
     else
-    	delayMs(1);
+        delayMs(1);
 }
 
 void LCD_data(unsigned char data) {
@@ -358,8 +371,8 @@ void LCD_data(unsigned char data) {
 void LCD_string(char cadena[]) {
     int i = 0;
     while(cadena[i] != 0) {
-    	LCD_data(cadena[i]);
-    	i++;
+        LCD_data(cadena[i]);
+        i++;
     }
 }
 
