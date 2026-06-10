@@ -2,11 +2,23 @@
 #include <stdio.h>
 
 #define PWM_MAX_VAL       4800
-#define PWM_MAX_CORR      4800
-#define PWM_BASE          4560
-#define PWM_MIN           4320
+#define PWM_MAX_CORR      3600
+#define PWM_BASE          3600
+#define PWM_MIN           3360
 #define PULSOS_POR_CM     12.78f
-#define KP                1
+#define KP                3
+
+#define LED_R_ON()   GPIOB->PCOR = (1<<18)
+#define LED_R_OFF()  GPIOB->PSOR = (1<<18)
+#define LED_G_ON()   GPIOB->PCOR = (1<<19)
+#define LED_G_OFF()  GPIOB->PSOR = (1<<19)
+#define LED_B_ON()   GPIOD->PCOR = (1<<1)
+#define LED_B_OFF()  GPIOD->PSOR = (1<<1)
+
+#define LED_ESPERANDO() do{ LED_R_OFF(); LED_G_OFF(); LED_B_ON();  }while(0)  // Azul
+#define LED_AVANZANDO() do{ LED_R_OFF(); LED_G_ON();  LED_B_OFF(); }while(0)  // Verde
+#define LED_REVERSA()   do{ LED_R_ON();  LED_G_OFF(); LED_B_OFF(); }while(0)  // Rojo
+#define LED_LLEGO()     do{ LED_R_ON();  LED_G_ON();  LED_B_ON();  }while(0)  // Blanco
 
 volatile uint32_t pulsosIzq = 0;
 volatile uint32_t pulsosDer = 0;
@@ -15,11 +27,13 @@ uint8_t estadoAntIzq = 0;
 uint8_t estadoAntDer = 0;
 
 void delay_ms(uint32_t ms);
+void LED_Init(void);
 void Motor_Init(void);
 void PWM_init(void);
 void PWM_Set(uint16_t pwmDer, uint16_t pwmIzq);
 void Encoder_Init(void);
 void Motores_Adelante(void);
+void Motores_Atras(void);
 void Motores_Stop(void);
 void Actualizar_Encoders(void);
 void Mover_Distancia(float cm, uint8_t reversa);
@@ -32,58 +46,64 @@ void Procesar_Comando(char *cmd);
 
 int main(void)
 {
-	Motor_Init();
-	PWM_init();
-	Encoder_Init();
-	UART0_init(9600);
-
-	char cmd[3];
-
-    while(1) {
-    	UART0_RecvCmd(cmd, 3);
-    	Procesar_Comando(cmd);
+    UART0_init(9600);
+    LED_Init();
+    Motor_Init();
+    PWM_init();
+    Encoder_Init();
+    LED_ESPERANDO();
+    char cmd[3];
+    while(1)
+    {
+        UART0_RecvCmd(cmd, 3);
+        Procesar_Comando(cmd);
     }
-
     return 0;
 }
 
-void delay_ms(uint32_t ms) {
-    for (uint32_t i = 0; i < ms * 2400UL; i++)
+void delay_ms(uint32_t ms)
+{
+    for(uint32_t i = 0; i < ms * 2400UL; i++)
         __asm volatile ("nop");
+}
+
+void LED_Init(void)
+{
+    SIM->SCGC5 |= SIM_SCGC5_PORTB_MASK | SIM_SCGC5_PORTD_MASK;
+    PORTB->PCR[18] = PORT_PCR_MUX(1);
+    PORTB->PCR[19] = PORT_PCR_MUX(1);
+    PORTD->PCR[1]  = PORT_PCR_MUX(1);
+    GPIOB->PDDR |= (1<<18)|(1<<19);
+    GPIOD->PDDR |= (1<<1);
+    LED_R_OFF();
+    LED_G_OFF();
+    LED_B_OFF();
 }
 
 void Motor_Init(void)
 {
     SIM->SCGC5 |= SIM_SCGC5_PORTC_MASK;
-
     PORTC->PCR[0] = PORT_PCR_MUX(1);
     PORTC->PCR[1] = PORT_PCR_MUX(1);
     PORTC->PCR[2] = PORT_PCR_MUX(1);
     PORTC->PCR[3] = PORT_PCR_MUX(1);
-
     GPIOC->PDDR |= (1<<0)|(1<<1)|(1<<2)|(1<<3);
 }
 
 void PWM_init(void)
 {
     SIM->SCGC5 |= SIM_SCGC5_PORTB_MASK;
-
-    PORTB->PCR[0] = PORT_PCR_MUX(3);   // Motor derecho
-    PORTB->PCR[1] = PORT_PCR_MUX(3);   // Motor izquierdo
-
+    PORTB->PCR[0] = PORT_PCR_MUX(3);
+    PORTB->PCR[1] = PORT_PCR_MUX(3);
     SIM->SCGC6 |= SIM_SCGC6_TPM1_MASK;
     SIM->SOPT2  |= SIM_SOPT2_TPMSRC(1);
     SIM->SOPT4  &= ~SIM_SOPT4_TPM1CH0SRC_MASK;
-
     TPM1->SC = 0;
     TPM1->MOD = PWM_MAX_VAL;
-
     TPM1->CONTROLS[0].CnSC = TPM_CnSC_MSB_MASK | TPM_CnSC_ELSB_MASK;
     TPM1->CONTROLS[1].CnSC = TPM_CnSC_MSB_MASK | TPM_CnSC_ELSB_MASK;
-
     TPM1->CONTROLS[0].CnV = 0;
     TPM1->CONTROLS[1].CnV = 0;
-
     TPM1->SC = TPM_SC_CMOD(1);
 }
 
@@ -96,34 +116,25 @@ void PWM_Set(uint16_t pwmDer, uint16_t pwmIzq)
 void Encoder_Init(void)
 {
     SIM->SCGC5 |= SIM_SCGC5_PORTE_MASK;
-
     PORTE->PCR[20] = PORT_PCR_MUX(1) | PORT_PCR_PE_MASK | PORT_PCR_PS_MASK;
     PORTE->PCR[21] = PORT_PCR_MUX(1) | PORT_PCR_PE_MASK | PORT_PCR_PS_MASK;
-
     GPIOE->PDDR &= ~((1<<20)|(1<<21));
-
     estadoAntIzq = (GPIOE->PDIR >> 20) & 1;
     estadoAntDer = (GPIOE->PDIR >> 21) & 1;
 }
 
 void Motores_Adelante(void)
 {
-    // Izquierdo adelante
     GPIOC->PCOR = (1<<0);
     GPIOC->PSOR = (1<<1);
-
-    // Derecho adelante
     GPIOC->PCOR = (1<<2);
     GPIOC->PSOR = (1<<3);
 }
 
 void Motores_Atras(void)
 {
-    // Izquierdo reversa
     GPIOC->PSOR = (1<<0);
     GPIOC->PCOR = (1<<1);
-
-    // Derecho reversa
     GPIOC->PSOR = (1<<2);
     GPIOC->PCOR = (1<<3);
 }
@@ -138,39 +149,41 @@ void Actualizar_Encoders(void)
 {
     uint8_t estadoIzq = (GPIOE->PDIR >> 20) & 1;
     uint8_t estadoDer = (GPIOE->PDIR >> 21) & 1;
-
-    if(estadoIzq != estadoAntIzq) { pulsosIzq++; estadoAntIzq = estadoIzq; }
-    if(estadoDer != estadoAntDer) { pulsosDer++; estadoAntDer = estadoDer; }
+    if(estadoIzq != estadoAntIzq){
+    	pulsosIzq++; estadoAntIzq = estadoIzq;
+    }
+    if(estadoDer != estadoAntDer){
+    	pulsosDer++; estadoAntDer = estadoDer;
+    }
 }
 
 void Mover_Distancia(float cm, uint8_t reversa)
 {
     uint32_t objetivo = (uint32_t)(cm * PULSOS_POR_CM);
-
     pulsosIzq = 0;
     pulsosDer = 0;
-
     estadoAntIzq = (GPIOE->PDIR >> 20) & 1;
     estadoAntDer = (GPIOE->PDIR >> 21) & 1;
-
     if(reversa)
+    {
         Motores_Atras();
+        LED_REVERSA();
+    }
     else
+    {
         Motores_Adelante();
-
+        LED_AVANZANDO();
+    }
     PWM_Set(PWM_BASE, PWM_BASE);
-
     while(1)
     {
         Actualizar_Encoders();
-
         uint32_t promedio = (pulsosIzq + pulsosDer) / 2;
-
         int32_t error = (int32_t)pulsosIzq - (int32_t)pulsosDer;
-
+        if(error >  20) error =  20;
+        if(error < -20) error = -20;
         int32_t pwmIzq, pwmDer;
-
-        if(error > 2 || error < -2)
+        if(error > 4 || error < -4)
         {
             pwmIzq = PWM_BASE - error * KP;
             pwmDer = PWM_BASE + error * KP;
@@ -191,12 +204,16 @@ void Mover_Distancia(float cm, uint8_t reversa)
         if(promedio >= objetivo)
         {
             Motores_Stop();
+            LED_LLEGO();
+            delay_ms(1000);
+            LED_ESPERANDO();
             break;
         }
     }
 }
 
-void UART0_init(uint32_t baud) {
+void UART0_init(uint32_t baud)
+{
     MCG->C4 |= MCG_C4_DMX32_MASK;
     MCG->C4  = (MCG->C4 & ~MCG_C4_DRST_DRS_MASK) | MCG_C4_DRST_DRS(1);
     SIM->CLKDIV1 = SIM_CLKDIV1_OUTDIV1(0) | SIM_CLKDIV1_OUTDIV4(1);
@@ -247,13 +264,11 @@ void UART0_RecvCmd(char *buf, uint8_t len)
 
 void Procesar_Comando(char *cmd)
 {
-    // KUB → avanzar 70 cm
     if(cmd[0]=='K' && cmd[1]=='U' && cmd[2]=='B')
     {
         Mover_Distancia(70, 0);
         UART0_SendStr("RL");
     }
-    // KBU → retroceder 70 cm
     else if(cmd[0]=='K' && cmd[1]=='B' && cmd[2]=='U')
     {
         Mover_Distancia(70, 1);
