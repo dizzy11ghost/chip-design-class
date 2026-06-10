@@ -1,29 +1,60 @@
-# Proyecto ARGO 
+#  ARGO - Sistema Automatizado de Gestión de Paquetes
+### Miguel Alonso De La Rosa Zamora  - Sophia Leñero Gómez - Gregorio Alejandro Orozco Torres 
+A01646106 - A01639462 - A01641967
 
-## DiagramaS de flujo del sistema
+## Descripción general
+Argo es un sistema de automatización de almacenes diseñado para demostrar la integración de sistemas embebidos, visión computacional, robótica y comunicaciones inalámbricas.
+
+El sistema permite almacenar y recuperar paquetes de manera automática mediante la coordinación de un brazo robótico Dobot Magician, un vehículo móvil autónomo, dos tarjetas FRDM-KL25Z, una Raspberry Pi 5, sensores fotoeléctricos para detección de espacios disponibles y visión computacional para clasificación de paquetes por color.
+
+El objetivo principal es simular el flujo de recepción, almacenamiento y entrega de paquetes dentro de un almacén inteligente.
+
+## Arquitectura del sistema
+### Módulo Master (FRDM-KL25Z)
+Su función es mostrar menús en pantalla LCD, leer entradas mediante teclado matricial, gestionar solicitudes de almacenamiento, gestionar solicitudes de recuperación, mostrar mensajes de estado, supervisar el botón de paro de emergencia y comunicarse con la Raspberry Pi mediante Bluetooth.
+
+Sistema Operativo:
+El módulo utiliza FreeRTOS para dividir responsabilidades en tareas independientes:
+
+Tareas relacionadas a UI:
+- Menú principal.
+- Solicitudes de almacenamiento.
+- Solicitudes de recuperación.
+- Mensajes al usuario.
+
+Tarea UART RX
+- Recibe mensajes Bluetooth y los almacena en una cola para evitar pérdida de datos.
+
+Tarea Emergencia
+- Tiene la máxima prioridad y detiene completamente el sistema cuando se activa el botón de emergencia.
+
+### Módulo Central (Raspberry Pi + Dobot)
+Funciones:
+- Procesamiento de visión computacional.
+- Comunicación con ambos módulos KL25Z.
+- Selección de posiciones de almacenamiento.
+- Control del Dobot Magician.
+- Supervisión de sensores fotoeléctricos.
+- Coordinación global del flujo de trabajo.
+
+### Módulo Vehículo Autónomo (FRDM-KL25Z)
+Controla el movimiento del carro encargado del transporte de paquetes.
+Funciones: 
+- Desplazamiento entre usuario y brazo robótico.
+- Control de motores DC mediante PWM.
+- Corrección de trayectoria usando encoders.
+- Comunicación UART/Bluetooth.
+- Indicación visual mediante LEDs RGB.
+
+Control de Movimiento:
+El vehículo utiliza encoders en ambas ruedas, control proporcional (P), corrección dinámica de velocidad y conteo de pulsos para estimación de distancia. La distancia recorrida se calcula mediante 12.78 pulsos/cm
+
+## Diagramas de flujo del sistema
 Diagrama sistema completo:
 <img width="1015" height="972" alt="image" src="https://github.com/user-attachments/assets/b8487263-3fbc-4e14-950b-1612c15813dd" />
 
-Diagrama FSM Raspberry Pi: 
-<img width="952" height="926" alt="image" src="https://github.com/user-attachments/assets/93181754-f01d-48a9-9ef8-7c5a2aee3e1e" />
-
 Diagrama mensajes bluetooth:
-<img width="1054" height="742" alt="image" src="https://github.com/user-attachments/assets/d374806c-7026-4146-a164-d1ddabf33bb0" />
+<img width="889" height="970" alt="image" src="https://github.com/user-attachments/assets/ee57e6b8-633e-4553-8fdf-4ceb68384c6a" />
 
 
-## Pruebas iniciales visión computacional
-Primera prueba: test de máscaras para detección de colores rojo, azul y amarillo, destinados a las cajas 
-<img width="663" height="751" alt="Captura de pantalla 2026-05-16 214523" src="https://github.com/user-attachments/assets/d36b3435-01f2-4859-8697-a71c47ca201b" />
-
-
-Traceback (most recent call last):
-  File "/home/ingenierinis/GOAT/chip-design-class/DOBORT/pydobot/main_dobot.py", line 22, in <module>
-    GPIO.setup(pin, GPIO.IN)
-  File "/usr/lib/python3/dist-packages/RPi/GPIO/__init__.py", line 696, in setup
-    _check(lgpio.gpio_claim_input(_chip, gpio, {
-  File "/usr/lib/python3/dist-packages/lgpio.py", line 755, in gpio_claim_input
-    return _u2i(_lgpio._gpio_claim_input(handle&0xffff, lFlags, gpio))
-  File "/usr/lib/python3/dist-packages/lgpio.py", line 458, in _u2i
-    raise error(error_text(v))
-lgpio.error: 'GPIO busy'
 
