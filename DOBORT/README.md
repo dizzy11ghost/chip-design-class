@@ -51,7 +51,8 @@ El vehículo utiliza encoders en ambas ruedas, control proporcional (P), correcc
 
 ## Diagramas de flujo del sistema
 Diagrama sistema completo:
-<img width="1015" height="972" alt="image" src="https://github.com/user-attachments/assets/b8487263-3fbc-4e14-950b-1612c15813dd" />
+<img width="903" height="963" alt="image" src="https://github.com/user-attachments/assets/62c2b43f-8dca-4b1a-bb0a-3f9ed982163a" />
+
 
 Diagrama mensajes bluetooth:
 <img width="889" height="970" alt="image" src="https://github.com/user-attachments/assets/ee57e6b8-633e-4553-8fdf-4ceb68384c6a" />
