@@ -4,7 +4,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
-#include "semphr.h" // ¡Nueva librería para Mutexes y Semáforos!
+#include "semphr.h"
 #include "board.h"
 #include "pin_mux.h"
 #include "clock_config.h"
@@ -33,7 +33,7 @@ typedef struct {
 #define BUTTON_PORT GPIOB
 #define BUTTON_GPIO PORTB
 #define BUTTON_PIN 0U
-#define BUTTON_IRQ PORTB_IRQn           // Vector de interrupción para el Puerto B
+#define BUTTON_IRQ PORTC_PORTB_IRQn    // CORRECCIÓN: Vector compartido para Puertos B y C en KL25Z
 
 #define ADC_BASE ADC0
 #define ADC_CH_LIGHT 9U       // PTB1
@@ -44,16 +44,16 @@ typedef struct {
 #define QUEUE_LENGTH 10
 
 // ============================================================================
-// HANDLERS DE FREERTOS (Mecanismos de Sincronización)
+// HANDLERS DE FREERTOS
 // ============================================================================
 QueueHandle_t sensorQueue = NULL;
-SemaphoreHandle_t xAdcMutex = NULL;          // Mutex para proteger el ADC0
-SemaphoreHandle_t xButtonSemaphore = NULL;  // Semáforo Binario para la ISR
+SemaphoreHandle_t xAdcMutex = NULL;
+SemaphoreHandle_t xButtonSemaphore = NULL;
 
 // Prototipos de Funciones
 static void vTaskLightSensor(void *pvParameters);
 static void vTaskTemperatureSensor(void *pvParameters);
-static void vTaskButtonInterruptHandler(void *pvParameters); // Renombrada/Adaptada
+static void vTaskButtonInterruptHandler(void *pvParameters);
 static void vTaskLedControl(void *pvParameters);
 
 // ============================================================================
@@ -66,15 +66,15 @@ int main(void) {
 
     CLOCK_EnableClock(kCLOCK_PortB);
     
-    // Configurar PTB0 como GPIO, Pull-Up INTERNO e Interrupción por Flanco de Bajada (Falling Edge)
+    // Configurar PTB0 con resistencia de Pull-Up e Interrupción por Flanco de Bajada
     PORT_SetPinMux(BUTTON_GPIO, BUTTON_PIN, kPORT_MuxAsGpio);
     BUTTON_GPIO->PCR[BUTTON_PIN] |= PORT_PCR_PE_MASK | PORT_PCR_PS_MASK | PORT_PCR_IRQC(0x0AU);
 
     gpio_pin_config_t button_gpio_config = { kGPIO_DigitalInput, 0 };
     GPIO_PinInit(BUTTON_PORT, BUTTON_PIN, &button_gpio_config);
 
-    // Habilitar la interrupción del Puerto B en el controlador de interrupciones (NVIC)
-    NVIC_SetPriority(BUTTON_IRQ, configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
+    // CORRECCIÓN: Asignación directa de prioridad de interrupción apta para FreeRTOS (Prioridad 2)
+    NVIC_SetPriority(BUTTON_IRQ, 2);
     EnableIRQ(BUTTON_IRQ);
 
     // Inicialización del Periférico ADC0
@@ -86,16 +86,14 @@ int main(void) {
     ADC16_EnableHardwareTrigger(ADC_BASE, false);
     ADC16_DoAutoCalibration(ADC_BASE);
 
-    PRINTF("--- FreeRTOS FRDM-KL25Z: Fase 3 (Mutex e Interrupciones) ---\r\n");
+    PRINTF("--- FreeRTOS FRDM-KL25Z: Fase 3 Corregida ---\r\n");
 
-    // 1. Creación de los objetos de FreeRTOS
     sensorQueue = xQueueCreate(QUEUE_LENGTH, sizeof(sensor_msg_t));
     xAdcMutex = xSemaphoreCreateMutex();
     xButtonSemaphore = xSemaphoreCreateBinary();
 
     if ((sensorQueue != NULL) && (xAdcMutex != NULL) && (xButtonSemaphore != NULL)) {
         
-        // 2. Creación de Tareas
         xTaskCreate(vTaskLightSensor, "Light", configMINIMAL_STACK_SIZE + 100, NULL, 2, NULL);
         xTaskCreate(vTaskTemperatureSensor, "Temp", configMINIMAL_STACK_SIZE + 100, NULL, 2, NULL);
         xTaskCreate(vTaskButtonInterruptHandler, "Button", configMINIMAL_STACK_SIZE + 100, NULL, 1, NULL);
@@ -103,7 +101,7 @@ int main(void) {
 
         vTaskStartScheduler();
     } else {
-        PRINTF("Error crítico: No se pudieron crear los recursos de sincronización.\r\n");
+        PRINTF("Error crítico: No se pudieron crear los recursos.\r\n");
     }
 
     while(1) {}
@@ -112,17 +110,16 @@ int main(void) {
 // ============================================================================
 // RUTINA DE SERVICIO DE INTERRUPCIÓN (ISR)
 // ============================================================================
-void PORTB_IRQHandler(void) {
+// CORRECCIÓN: El nombre del manejador debe coincidir con el vector PORTC_PORTB
+void PORTC_PORTB_IRQHandler(void) {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-    // Limpiar la bandera de interrupción del pin PTB0 para evitar bucles infinitos
-    uint32_t flags = GPIO_PortGetInterruptFlags(BUTTON_PORT);
-    GPIO_PortClearInterruptFlags(BUTTON_PORT, flags);
+    // CORRECCIÓN: Nombres de funciones corregidos según la última actualización del driver GPIO de NXP
+    uint32_t flags = GPIO_GetPinsInterruptFlags(BUTTON_PORT);
+    GPIO_ClearPinsInterruptFlags(BUTTON_PORT, flags);
 
-    // Liberar el semáforo de forma segura desde la ISR
     xSemaphoreGiveFromISR(xButtonSemaphore, &xHigherPriorityTaskWoken);
 
-    // Forzar un cambio de contexto si la tarea despertada tiene mayor prioridad
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
@@ -142,16 +139,13 @@ static void vTaskLightSensor(void *pvParameters)
 
     while(1)
     {
-        // GARANTÍA MUTEX: Tomamos la llave del ADC. Si Temp la tiene, nos bloqueamos de forma segura.
         if (xSemaphoreTake(xAdcMutex, portMAX_DELAY) == pdTRUE) {
             
             ADC16_SetChannelConfig(ADC_BASE, 0U, &adcConfigLight);
             while (0U == (kADC16_ChannelConversionDoneFlag & ADC16_GetChannelStatusFlags(ADC_BASE, 0U))) {}
             msg.value = ADC16_GetChannelConversionValue(ADC_BASE, 0U);
             
-            // Liberamos la llave inmediatamente al terminar de usar el hardware
             xSemaphoreGive(xAdcMutex);
-            
             xQueueSend(sensorQueue, &msg, 0U);
         }
         vTaskDelay(pdMS_TO_TICKS(500));
@@ -170,7 +164,6 @@ static void vTaskTemperatureSensor(void *pvParameters)
 
     while(1)
     {
-        // GARANTÍA MUTEX: Protegemos el canal compartido de hardware ADC0
         if (xSemaphoreTake(xAdcMutex, portMAX_DELAY) == pdTRUE) {
             
             ADC16_SetChannelConfig(ADC_BASE, 0U, &adcConfigTemperature);
@@ -178,7 +171,6 @@ static void vTaskTemperatureSensor(void *pvParameters)
             msg.value = ADC16_GetChannelConversionValue(ADC_BASE, 0U);
             
             xSemaphoreGive(xAdcMutex);
-            
             xQueueSend(sensorQueue, &msg, 0U);
         }
         vTaskDelay(pdMS_TO_TICKS(500));
@@ -192,16 +184,10 @@ static void vTaskButtonInterruptHandler(void *pvParameters)
     uint32_t last_stable_state = 0;
 
     for (;;) {
-        /*
-          BOTÓN CERO-CPU: La tarea se duerme por completo. No consume ciclos de reloj
-          hasta que la ISR física del botón libere este semáforo.
-        */
         if (xSemaphoreTake(xButtonSemaphore, portMAX_DELAY) == pdTRUE) {
             
-            // 1. Debounce por Software: Esperamos un momento a que el ruido físico se estabilice
-            vTaskDelay(pdMS_TO_TICKS(50));
+            vTaskDelay(pdMS_TO_TICKS(50)); // Debounce
             
-            // 2. Comprobar el estado real después del ruido
             uint32_t current_state = !GPIO_ReadPinInput(BUTTON_PORT, BUTTON_PIN);
             
             if (current_state != last_stable_state) {
@@ -210,8 +196,7 @@ static void vTaskButtonInterruptHandler(void *pvParameters)
                 last_stable_state = current_state;
             }
             
-            // 3. Limpieza de ruidos fantasmas acumulados en el semáforo durante el delay
-            xSemaphoreTake(xButtonSemaphore, 0U);
+            xSemaphoreTake(xButtonSemaphore, 0U); // Clear bounce accumulation
         }
     }
 }
