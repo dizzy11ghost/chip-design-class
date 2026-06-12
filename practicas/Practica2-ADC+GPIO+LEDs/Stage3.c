@@ -33,7 +33,7 @@ typedef struct {
 #define BUTTON_PORT GPIOB
 #define BUTTON_GPIO PORTB
 #define BUTTON_PIN 0U
-#define BUTTON_IRQ PORTC_PORTB_IRQn    // CORRECCIÓN: Vector compartido para Puertos B y C en KL25Z
+#define BUTTON_IRQ ((IRQn_Type)31) // Forzamos el número de vector físico 31 del KL25Z (Puertos B/C)
 
 #define ADC_BASE ADC0
 #define ADC_CH_LIGHT 9U       // PTB1
@@ -111,10 +111,10 @@ int main(void) {
 // RUTINA DE SERVICIO DE INTERRUPCIÓN (ISR)
 // ============================================================================
 // CORRECCIÓN: El nombre del manejador debe coincidir con el vector PORTC_PORTB
-void PORTC_PORTB_IRQHandler(void) {
+void PORTA_IRQHandler(void) {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-    // CORRECCIÓN: Nombres de funciones corregidos según la última actualización del driver GPIO de NXP
+    // Nombres de funciones corregidos según la última actualización del driver GPIO de NXP
     uint32_t flags = GPIO_GetPinsInterruptFlags(BUTTON_PORT);
     GPIO_ClearPinsInterruptFlags(BUTTON_PORT, flags);
 
