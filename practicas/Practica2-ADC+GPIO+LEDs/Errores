@@ -1,93 +1,35 @@
-15:08:05 **** Clean-only build of configuration Debug for project FreeRTOSStage2 ****
-make -r -j16 clean 
-rm -rf ./utilities/fsl_debug_console.d ./utilities/fsl_debug_console.o
-rm -rf ./startup/startup_mkl25z4.d ./startup/startup_mkl25z4.o
-rm -rf ./source/FreeRTOSStage2.d ./source/FreeRTOSStage2.o ./source/mtb.d ./source/mtb.o ./source/semihost_hardfault.d ./source/semihost_hardfault.o
-rm -rf ./freertos/croutine.d ./freertos/croutine.o ./freertos/event_groups.d ./freertos/event_groups.o ./freertos/fsl_tickless_lptmr.d ./freertos/fsl_tickless_lptmr.o ./freertos/fsl_tickless_systick.d ./freertos/fsl_tickless_systick.o ./freertos/heap_4.d ./freertos/heap_4.o ./freertos/list.d ./freertos/list.o ./freertos/port.d ./freertos/port.o ./freertos/queue.d ./freertos/queue.o ./freertos/tasks.d ./freertos/tasks.o ./freertos/timers.d ./freertos/timers.o
-rm -rf ./drivers/fsl_clock.d ./drivers/fsl_clock.o ./drivers/fsl_common.d ./drivers/fsl_common.o ./drivers/fsl_flash.d ./drivers/fsl_flash.o ./drivers/fsl_gpio.d ./drivers/fsl_gpio.o ./drivers/fsl_lpsci.d ./drivers/fsl_lpsci.o ./drivers/fsl_lpsci_freertos.d ./drivers/fsl_lpsci_freertos.o ./drivers/fsl_smc.d ./drivers/fsl_smc.o ./drivers/fsl_uart.d ./drivers/fsl_uart.o ./drivers/fsl_uart_freertos.d ./drivers/fsl_uart_freertos.o
-rm -rf ./board/board.d ./board/board.o ./board/clock_config.d ./board/clock_config.o ./board/peripherals.d ./board/peripherals.o ./board/pin_mux.d ./board/pin_mux.o
-rm -rf ./CMSIS/system_MKL25Z4.d ./CMSIS/system_MKL25Z4.o
-rm -rf FreeRTOSStage2.axf
- 
-
-15:08:05 Build Finished. 0 errors, 0 warnings. (took 602ms)
-
-15:08:05 **** Incremental Build of configuration Debug for project FreeRTOSStage2 ****
+15:33:21 **** Incremental Build of configuration Debug for project FreeRTOS_practica_F_practica ****
 make -r -j16 all 
-Building file: ../utilities/fsl_debug_console.c
-Building file: ../startup/startup_mkl25z4.c
-Building file: ../source/FreeRTOSStage2.c
+Building file: ../source/FreeRTOS_practica_F_practica.c
 Invoking: MCU C Compiler
-Invoking: MCU C Compiler
-Invoking: MCU C Compiler
-arm-none-eabi-gcc -D__REDLIB__ -DCPU_MKL25Z128VLK4 -DCPU_MKL25Z128VLK4_cm0plus -DSDK_OS_BAREMETAL -DFSL_RTOS_BM -DSDK_DEBUGCONSOLE=1 -DCR_INTEGER_PRINTF -DPRINTF_FLOAT_ENABLE=0 -DSDK_OS_FREE_RTOS -DFSL_RTOS_FREE_RTOS -D__MCUXPRESSO -D__USE_CMSIS -DDEBUG -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\board" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\source" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\drivers" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\startup" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\utilities" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\CMSIS" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\freertos" -O0 -fno-common -g3 -gdwarf-4 -Wall -c -fmessage-length=0 -fno-builtin -ffunction-sections -fdata-sections -fmerge-constants -fmacro-prefix-map="../utilities/"= -mcpu=cortex-m0plus -mthumb -D__REDLIB__ -fstack-usage -specs=redlib.specs -MMD -MP -MF"utilities/fsl_debug_console.d" -MT"utilities/fsl_debug_console.o" -MT"utilities/fsl_debug_console.d" -o "utilities/fsl_debug_console.o" "../utilities/fsl_debug_console.c"
-Building file: ../source/mtb.c
-arm-none-eabi-gcc -D__REDLIB__ -DCPU_MKL25Z128VLK4 -DCPU_MKL25Z128VLK4_cm0plus -DSDK_OS_BAREMETAL -DFSL_RTOS_BM -DSDK_DEBUGCONSOLE=1 -DCR_INTEGER_PRINTF -DPRINTF_FLOAT_ENABLE=0 -DSDK_OS_FREE_RTOS -DFSL_RTOS_FREE_RTOS -D__MCUXPRESSO -D__USE_CMSIS -DDEBUG -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\board" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\source" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\drivers" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\startup" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\utilities" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\CMSIS" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\freertos" -O0 -fno-common -g3 -gdwarf-4 -Wall -c -fmessage-length=0 -fno-builtin -ffunction-sections -fdata-sections -fmerge-constants -fmacro-prefix-map="../startup/"= -mcpu=cortex-m0plus -mthumb -D__REDLIB__ -fstack-usage -specs=redlib.specs -MMD -MP -MF"startup/startup_mkl25z4.d" -MT"startup/startup_mkl25z4.o" -MT"startup/startup_mkl25z4.d" -o "startup/startup_mkl25z4.o" "../startup/startup_mkl25z4.c"
-arm-none-eabi-gcc -D__REDLIB__ -DCPU_MKL25Z128VLK4 -DCPU_MKL25Z128VLK4_cm0plus -DSDK_OS_BAREMETAL -DFSL_RTOS_BM -DSDK_DEBUGCONSOLE=1 -DCR_INTEGER_PRINTF -DPRINTF_FLOAT_ENABLE=0 -DSDK_OS_FREE_RTOS -DFSL_RTOS_FREE_RTOS -D__MCUXPRESSO -D__USE_CMSIS -DDEBUG -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\board" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\source" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\drivers" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\startup" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\utilities" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\CMSIS" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\freertos" -O0 -fno-common -g3 -gdwarf-4 -Wall -c -fmessage-length=0 -fno-builtin -ffunction-sections -fdata-sections -fmerge-constants -fmacro-prefix-map="../source/"= -mcpu=cortex-m0plus -mthumb -D__REDLIB__ -fstack-usage -specs=redlib.specs -MMD -MP -MF"source/FreeRTOSStage2.d" -MT"source/FreeRTOSStage2.o" -MT"source/FreeRTOSStage2.d" -o "source/FreeRTOSStage2.o" "../source/FreeRTOSStage2.c"
-Invoking: MCU C Compiler
-arm-none-eabi-gcc -D__REDLIB__ -DCPU_MKL25Z128VLK4 -DCPU_MKL25Z128VLK4_cm0plus -DSDK_OS_BAREMETAL -DFSL_RTOS_BM -DSDK_DEBUGCONSOLE=1 -DCR_INTEGER_PRINTF -DPRINTF_FLOAT_ENABLE=0 -DSDK_OS_FREE_RTOS -DFSL_RTOS_FREE_RTOS -D__MCUXPRESSO -D__USE_CMSIS -DDEBUG -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\board" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\source" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\drivers" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\startup" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\utilities" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\CMSIS" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\freertos" -O0 -fno-common -g3 -gdwarf-4 -Wall -c -fmessage-length=0 -fno-builtin -ffunction-sections -fdata-sections -fmerge-constants -fmacro-prefix-map="../source/"= -mcpu=cortex-m0plus -mthumb -D__REDLIB__ -fstack-usage -specs=redlib.specs -MMD -MP -MF"source/mtb.d" -MT"source/mtb.o" -MT"source/mtb.d" -o "source/mtb.o" "../source/mtb.c"
-Building file: ../source/semihost_hardfault.c
-Building file: ../freertos/croutine.c
-Building file: ../freertos/event_groups.c
-Invoking: MCU C Compiler
-Invoking: MCU C Compiler
-arm-none-eabi-gcc -D__REDLIB__ -DCPU_MKL25Z128VLK4 -DCPU_MKL25Z128VLK4_cm0plus -DSDK_OS_BAREMETAL -DFSL_RTOS_BM -DSDK_DEBUGCONSOLE=1 -DCR_INTEGER_PRINTF -DPRINTF_FLOAT_ENABLE=0 -DSDK_OS_FREE_RTOS -DFSL_RTOS_FREE_RTOS -D__MCUXPRESSO -D__USE_CMSIS -DDEBUG -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\board" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\source" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\drivers" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\startup" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\utilities" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\CMSIS" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\freertos" -O0 -fno-common -g3 -gdwarf-4 -Wall -c -fmessage-length=0 -fno-builtin -ffunction-sections -fdata-sections -fmerge-constants -fmacro-prefix-map="../source/"= -mcpu=cortex-m0plus -mthumb -D__REDLIB__ -fstack-usage -specs=redlib.specs -MMD -MP -MF"source/semihost_hardfault.d" -MT"source/semihost_hardfault.o" -MT"source/semihost_hardfault.d" -o "source/semihost_hardfault.o" "../source/semihost_hardfault.c"
-arm-none-eabi-gcc -D__REDLIB__ -DCPU_MKL25Z128VLK4 -DCPU_MKL25Z128VLK4_cm0plus -DSDK_OS_BAREMETAL -DFSL_RTOS_BM -DSDK_DEBUGCONSOLE=1 -DCR_INTEGER_PRINTF -DPRINTF_FLOAT_ENABLE=0 -DSDK_OS_FREE_RTOS -DFSL_RTOS_FREE_RTOS -D__MCUXPRESSO -D__USE_CMSIS -DDEBUG -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\board" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\source" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\drivers" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\startup" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\utilities" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\CMSIS" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\freertos" -O0 -fno-common -g3 -gdwarf-4 -Wall -c -fmessage-length=0 -fno-builtin -ffunction-sections -fdata-sections -fmerge-constants -fmacro-prefix-map="../freertos/"= -mcpu=cortex-m0plus -mthumb -D__REDLIB__ -fstack-usage -specs=redlib.specs -MMD -MP -MF"freertos/croutine.d" -MT"freertos/croutine.o" -MT"freertos/croutine.d" -o "freertos/croutine.o" "../freertos/croutine.c"
-Building file: ../freertos/fsl_tickless_lptmr.c
-Invoking: MCU C Compiler
-arm-none-eabi-gcc -D__REDLIB__ -DCPU_MKL25Z128VLK4 -DCPU_MKL25Z128VLK4_cm0plus -DSDK_OS_BAREMETAL -DFSL_RTOS_BM -DSDK_DEBUGCONSOLE=1 -DCR_INTEGER_PRINTF -DPRINTF_FLOAT_ENABLE=0 -DSDK_OS_FREE_RTOS -DFSL_RTOS_FREE_RTOS -D__MCUXPRESSO -D__USE_CMSIS -DDEBUG -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\board" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\source" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\drivers" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\startup" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\utilities" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\CMSIS" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\freertos" -O0 -fno-common -g3 -gdwarf-4 -Wall -c -fmessage-length=0 -fno-builtin -ffunction-sections -fdata-sections -fmerge-constants -fmacro-prefix-map="../freertos/"= -mcpu=cortex-m0plus -mthumb -D__REDLIB__ -fstack-usage -specs=redlib.specs -MMD -MP -MF"freertos/event_groups.d" -MT"freertos/event_groups.o" -MT"freertos/event_groups.d" -o "freertos/event_groups.o" "../freertos/event_groups.c"
-Invoking: MCU C Compiler
-arm-none-eabi-gcc -D__REDLIB__ -DCPU_MKL25Z128VLK4 -DCPU_MKL25Z128VLK4_cm0plus -DSDK_OS_BAREMETAL -DFSL_RTOS_BM -DSDK_DEBUGCONSOLE=1 -DCR_INTEGER_PRINTF -DPRINTF_FLOAT_ENABLE=0 -DSDK_OS_FREE_RTOS -DFSL_RTOS_FREE_RTOS -D__MCUXPRESSO -D__USE_CMSIS -DDEBUG -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\board" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\source" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\drivers" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\startup" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\utilities" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\CMSIS" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\freertos" -O0 -fno-common -g3 -gdwarf-4 -Wall -c -fmessage-length=0 -fno-builtin -ffunction-sections -fdata-sections -fmerge-constants -fmacro-prefix-map="../freertos/"= -mcpu=cortex-m0plus -mthumb -D__REDLIB__ -fstack-usage -specs=redlib.specs -MMD -MP -MF"freertos/fsl_tickless_lptmr.d" -MT"freertos/fsl_tickless_lptmr.o" -MT"freertos/fsl_tickless_lptmr.d" -o "freertos/fsl_tickless_lptmr.o" "../freertos/fsl_tickless_lptmr.c"
-Building file: ../freertos/fsl_tickless_systick.c
-../utilities/fsl_debug_console.c: In function 'DbgConsole_Getchar':
-../utilities/fsl_debug_console.c:482:31: warning: 'ch' may be used uninitialized [-Wmaybe-uninitialized]
-  482 |     while (kStatus_Success != s_debugConsole.ops.rx_union.GetChar(s_debugConsole.base, (uint8_t *)(&ch), 1))
-      |                               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-../utilities/fsl_debug_console.c:482:31: note: by argument 2 of type 'const uint8_t *' {aka 'const unsigned char *'} to 'status_t(void *, const uint8_t *, size_t)' {aka 'int(void *, const unsigned char *, unsigned int)'}
-../utilities/fsl_debug_console.c:476:10: note: 'ch' declared here
-  476 |     char ch;
-      |          ^~
-../source/FreeRTOSStage2.c:11:10: fatal error: fsl_adc16.h: No such file or directory
-   11 | #include "fsl_adc16.h"
-      |          ^~~~~~~~~~~~~
-compilation terminated.
-Building file: ../freertos/heap_4.c
-Invoking: MCU C Compiler
-make[1]: *** [source/subdir.mk:26: source/FreeRTOSStage2.o] Error 1
-make[1]: *** Waiting for unfinished jobs....
-arm-none-eabi-gcc -D__REDLIB__ -DCPU_MKL25Z128VLK4 -DCPU_MKL25Z128VLK4_cm0plus -DSDK_OS_BAREMETAL -DFSL_RTOS_BM -DSDK_DEBUGCONSOLE=1 -DCR_INTEGER_PRINTF -DPRINTF_FLOAT_ENABLE=0 -DSDK_OS_FREE_RTOS -DFSL_RTOS_FREE_RTOS -D__MCUXPRESSO -D__USE_CMSIS -DDEBUG -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\board" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\source" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\drivers" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\startup" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\utilities" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\CMSIS" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\freertos" -O0 -fno-common -g3 -gdwarf-4 -Wall -c -fmessage-length=0 -fno-builtin -ffunction-sections -fdata-sections -fmerge-constants -fmacro-prefix-map="../freertos/"= -mcpu=cortex-m0plus -mthumb -D__REDLIB__ -fstack-usage -specs=redlib.specs -MMD -MP -MF"freertos/fsl_tickless_systick.d" -MT"freertos/fsl_tickless_systick.o" -MT"freertos/fsl_tickless_systick.d" -o "freertos/fsl_tickless_systick.o" "../freertos/fsl_tickless_systick.c"
-Building file: ../freertos/list.c
-Building file: ../freertos/port.c
-Invoking: MCU C Compiler
-arm-none-eabi-gcc -D__REDLIB__ -DCPU_MKL25Z128VLK4 -DCPU_MKL25Z128VLK4_cm0plus -DSDK_OS_BAREMETAL -DFSL_RTOS_BM -DSDK_DEBUGCONSOLE=1 -DCR_INTEGER_PRINTF -DPRINTF_FLOAT_ENABLE=0 -DSDK_OS_FREE_RTOS -DFSL_RTOS_FREE_RTOS -D__MCUXPRESSO -D__USE_CMSIS -DDEBUG -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\board" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\source" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\drivers" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\startup" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\utilities" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\CMSIS" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\freertos" -O0 -fno-common -g3 -gdwarf-4 -Wall -c -fmessage-length=0 -fno-builtin -ffunction-sections -fdata-sections -fmerge-constants -fmacro-prefix-map="../freertos/"= -mcpu=cortex-m0plus -mthumb -D__REDLIB__ -fstack-usage -specs=redlib.specs -MMD -MP -MF"freertos/heap_4.d" -MT"freertos/heap_4.o" -MT"freertos/heap_4.d" -o "freertos/heap_4.o" "../freertos/heap_4.c"
-Invoking: MCU C Compiler
-Invoking: MCU C Compiler
-arm-none-eabi-gcc -D__REDLIB__ -DCPU_MKL25Z128VLK4 -DCPU_MKL25Z128VLK4_cm0plus -DSDK_OS_BAREMETAL -DFSL_RTOS_BM -DSDK_DEBUGCONSOLE=1 -DCR_INTEGER_PRINTF -DPRINTF_FLOAT_ENABLE=0 -DSDK_OS_FREE_RTOS -DFSL_RTOS_FREE_RTOS -D__MCUXPRESSO -D__USE_CMSIS -DDEBUG -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\board" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\source" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\drivers" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\startup" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\utilities" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\CMSIS" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\freertos" -O0 -fno-common -g3 -gdwarf-4 -Wall -c -fmessage-length=0 -fno-builtin -ffunction-sections -fdata-sections -fmerge-constants -fmacro-prefix-map="../freertos/"= -mcpu=cortex-m0plus -mthumb -D__REDLIB__ -fstack-usage -specs=redlib.specs -MMD -MP -MF"freertos/list.d" -MT"freertos/list.o" -MT"freertos/list.d" -o "freertos/list.o" "../freertos/list.c"
-arm-none-eabi-gcc -D__REDLIB__ -DCPU_MKL25Z128VLK4 -DCPU_MKL25Z128VLK4_cm0plus -DSDK_OS_BAREMETAL -DFSL_RTOS_BM -DSDK_DEBUGCONSOLE=1 -DCR_INTEGER_PRINTF -DPRINTF_FLOAT_ENABLE=0 -DSDK_OS_FREE_RTOS -DFSL_RTOS_FREE_RTOS -D__MCUXPRESSO -D__USE_CMSIS -DDEBUG -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\board" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\source" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\drivers" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\startup" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\utilities" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\CMSIS" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOSStage2\freertos" -O0 -fno-common -g3 -gdwarf-4 -Wall -c -fmessage-length=0 -fno-builtin -ffunction-sections -fdata-sections -fmerge-constants -fmacro-prefix-map="../freertos/"= -mcpu=cortex-m0plus -mthumb -D__REDLIB__ -fstack-usage -specs=redlib.specs -MMD -MP -MF"freertos/port.d" -MT"freertos/port.o" -MT"freertos/port.d" -o "freertos/port.o" "../freertos/port.c"
-Finished building: ../source/mtb.c
- 
-Finished building: ../startup/startup_mkl25z4.c
-Finished building: ../freertos/croutine.c
-Finished building: ../source/semihost_hardfault.c
- 
- 
- 
-Finished building: ../freertos/fsl_tickless_lptmr.c
- 
-Finished building: ../freertos/event_groups.c
-Finished building: ../utilities/fsl_debug_console.c
-Finished building: ../freertos/fsl_tickless_systick.c
- 
- 
- 
-Finished building: ../freertos/heap_4.c
-Finished building: ../freertos/list.c
-Finished building: ../freertos/port.c
- 
- 
- 
+arm-none-eabi-gcc -D__REDLIB__ -DCPU_MKL25Z128VLK4 -DCPU_MKL25Z128VLK4_cm0plus -DSDK_OS_BAREMETAL -DFSL_RTOS_BM -DSDK_DEBUGCONSOLE=1 -DCR_INTEGER_PRINTF -DPRINTF_FLOAT_ENABLE=0 -DSDK_OS_FREE_RTOS -DFSL_RTOS_FREE_RTOS -D__MCUXPRESSO -D__USE_CMSIS -DDEBUG -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOS_practica_F_practica\board" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOS_practica_F_practica\source" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOS_practica_F_practica" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOS_practica_F_practica\drivers" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOS_practica_F_practica\startup" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOS_practica_F_practica\utilities" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOS_practica_F_practica\CMSIS" -I"C:\Users\migue\Desktop\Sistemas_chip\FreeRTOS_practica_F_practica\freertos" -O0 -fno-common -g3 -gdwarf-4 -Wall -c -fmessage-length=0 -fno-builtin -ffunction-sections -fdata-sections -fmerge-constants -fmacro-prefix-map="../source/"= -mcpu=cortex-m0plus -mthumb -D__REDLIB__ -fstack-usage -specs=redlib.specs -MMD -MP -MF"source/FreeRTOS_practica_F_practica.d" -MT"source/FreeRTOS_practica_F_practica.o" -MT"source/FreeRTOS_practica_F_practica.d" -o "source/FreeRTOS_practica_F_practica.o" "../source/FreeRTOS_practica_F_practica.c"
+../source/FreeRTOS_practica_F_practica.c: In function 'main':
+../source/FreeRTOS_practica_F_practica.c:36:20: error: 'PORTB_IRQn' undeclared (first use in this function); did you mean 'PORTD_IRQn'?
+   36 | #define BUTTON_IRQ PORTB_IRQn           // Vector de interrupciÃ³n para el Puerto B
+      |                    ^~~~~~~~~~
+../source/FreeRTOS_practica_F_practica.c:77:22: note: in expansion of macro 'BUTTON_IRQ'
+   77 |     NVIC_SetPriority(BUTTON_IRQ, configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
+      |                      ^~~~~~~~~~
+../source/FreeRTOS_practica_F_practica.c:36:20: note: each undeclared identifier is reported only once for each function it appears in
+   36 | #define BUTTON_IRQ PORTB_IRQn           // Vector de interrupciÃ³n para el Puerto B
+      |                    ^~~~~~~~~~
+../source/FreeRTOS_practica_F_practica.c:77:22: note: in expansion of macro 'BUTTON_IRQ'
+   77 |     NVIC_SetPriority(BUTTON_IRQ, configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
+      |                      ^~~~~~~~~~
+../source/FreeRTOS_practica_F_practica.c:77:34: error: 'configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY' undeclared (first use in this function)
+   77 |     NVIC_SetPriority(BUTTON_IRQ, configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
+      |                                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../source/FreeRTOS_practica_F_practica.c: In function 'PORTB_IRQHandler':
+../source/FreeRTOS_practica_F_practica.c:119:22: error: implicit declaration of function 'GPIO_PortGetInterruptFlags'; did you mean 'GPIO_GetPinsInterruptFlags'? [-Wimplicit-function-declaration]
+  119 |     uint32_t flags = GPIO_PortGetInterruptFlags(BUTTON_PORT);
+      |                      ^~~~~~~~~~~~~~~~~~~~~~~~~~
+      |                      GPIO_GetPinsInterruptFlags
+../source/FreeRTOS_practica_F_practica.c:120:5: error: implicit declaration of function 'GPIO_PortClearInterruptFlags'; did you mean 'GPIO_ClearPinsInterruptFlags'? [-Wimplicit-function-declaration]
+  120 |     GPIO_PortClearInterruptFlags(BUTTON_PORT, flags);
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     GPIO_ClearPinsInterruptFlags
+make[1]: *** [source/subdir.mk:26: source/FreeRTOS_practica_F_practica.o] Error 1
 make: *** [makefile:41: all] Error 2
 "make -r -j16 all" terminated with exit code 2. Build might be incomplete.
 
-15:08:07 Build Failed. 4 errors, 1 warnings. (took 1s.155ms)
-
+15:33:22 Build Failed. 6 errors, 0 warnings. (took 838ms)
