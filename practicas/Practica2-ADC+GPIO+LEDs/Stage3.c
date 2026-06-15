@@ -4,7 +4,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
-#include "semphr.h" // Se incluye para activar el Mutex
+#include "semphr.h" 
 #include "board.h"
 #include "pin_mux.h"
 #include "clock_config.h"
@@ -13,9 +13,6 @@
 #include "fsl_adc16.h"
 #include "fsl_port.h"
 
-// ============================================================================
-// ESTRUCTURAS Y ENUMS
-// ============================================================================
 typedef enum {
     SOURCE_LIGHT,
     SOURCE_TEMPERATURE,
@@ -27,41 +24,29 @@ typedef struct {
     uint16_t value;
 } sensor_msg_t;
 
-// ============================================================================
-// CONFIGURACIÓN DE HARDWARE Y CONSTANTES
-// ============================================================================
 #define BUTTON_PORT GPIOB
 #define BUTTON_GPIO PORTB
 #define BUTTON_PIN 0U
-
 #define ADC_BASE ADC0
 #define ADC_CH_LIGHT 9U       // PTB1
 #define ADC_CH_TEMPERATURE 12U // PTB2
-
 #define LIGHT_THRESHOLD 2048
 #define TEMP_THRESHOLD 2048
 #define QUEUE_LENGTH 10
 
-// Handlers globales de FreeRTOS
 QueueHandle_t sensorQueue = NULL;
-SemaphoreHandle_t xAdcMutex = NULL; // El escudo protector para el ADC0
+SemaphoreHandle_t xAdcMutex = NULL; 
 
-// Prototipos de Funciones
 static void vTaskLightSensor(void *pvParameters);
 static void vTaskTemperatureSensor(void *pvParameters);
 static void vTaskButtonPolling(void *pvParameters);
 static void vTaskLedControl(void *pvParameters);
 
-// ============================================================================
-// FUNCIÓN PRINCIPAL (MAIN)
-// ============================================================================
 int main(void) {
     BOARD_InitBootPins();
     BOARD_InitBootClocks();
     BOARD_InitDebugConsole();
-
     CLOCK_EnableClock(kCLOCK_PortB);
-    
     PORT_SetPinMux(BUTTON_GPIO, BUTTON_PIN, kPORT_MuxAsGpio);
     BUTTON_GPIO->PCR[BUTTON_PIN] |= PORT_PCR_PE_MASK | PORT_PCR_PS_MASK;
 
@@ -78,17 +63,14 @@ int main(void) {
 
     PRINTF("--- FreeRTOS FRDM-KL25Z: Fase 3 (Solución Segura) ---\r\n");
 
-    // Creación de la cola y el Mutex
     sensorQueue = xQueueCreate(QUEUE_LENGTH, sizeof(sensor_msg_t));
     xAdcMutex = xSemaphoreCreateMutex();
 
     if ((sensorQueue != NULL) && (xAdcMutex != NULL)) {
-        // Tareas con base funcional de la Fase 2
         xTaskCreate(vTaskLightSensor, "Light", configMINIMAL_STACK_SIZE + 100, NULL, 2, NULL);
         xTaskCreate(vTaskTemperatureSensor, "Temp", configMINIMAL_STACK_SIZE + 100, NULL, 2, NULL);
         xTaskCreate(vTaskButtonPolling, "Button", configMINIMAL_STACK_SIZE + 100, NULL, 1, NULL);
         xTaskCreate(vTaskLedControl, "LEDs", configMINIMAL_STACK_SIZE + 100, NULL, 3, NULL);
-
         vTaskStartScheduler();
     } else {
         PRINTF("Error crítico al crear recursos.\r\n");
@@ -96,10 +78,6 @@ int main(void) {
 
     while(1) {}
 }
-
-// ============================================================================
-// IMPLEMENTACIÓN DE TAREAS (PRODUCTORES)
-// ============================================================================
 
 static void vTaskLightSensor(void *pvParameters)
 {
@@ -113,14 +91,12 @@ static void vTaskLightSensor(void *pvParameters)
 
     while(1)
     {
-        // PROTECCIÓN CON MUTEX: Tomamos la llave antes de tocar el ADC0
         if (xSemaphoreTake(xAdcMutex, portMAX_DELAY) == pdTRUE) {
             ADC16_SetChannelConfig(ADC_BASE, 0U, &adcConfigLight);
             while (0U == (kADC16_ChannelConversionDoneFlag & ADC16_GetChannelStatusFlags(ADC_BASE, 0U))) {}
             msg.value = ADC16_GetChannelConversionValue(ADC_BASE, 0U);
             
-            xSemaphoreGive(xAdcMutex); // Soltamos la llave inmediatamente
-            
+            xSemaphoreGive(xAdcMutex); 
             xQueueSend(sensorQueue, &msg, 0U);
         }
         vTaskDelay(pdMS_TO_TICKS(300));
@@ -139,14 +115,12 @@ static void vTaskTemperatureSensor(void *pvParameters)
 
     while(1)
     {
-        // PROTECCIÓN CON MUTEX: Evita que esta tarea pise la conversión de la Luz
         if (xSemaphoreTake(xAdcMutex, portMAX_DELAY) == pdTRUE) {
             ADC16_SetChannelConfig(ADC_BASE, 0U, &adcConfigTemperature);
             while (0U == (kADC16_ChannelConversionDoneFlag & ADC16_GetChannelStatusFlags(ADC_BASE, 0U))) {}
             msg.value = ADC16_GetChannelConversionValue(ADC_BASE, 0U);
             
             xSemaphoreGive(xAdcMutex);
-            
             xQueueSend(sensorQueue, &msg, 0U);
         }
         vTaskDelay(pdMS_TO_TICKS(300));
@@ -159,7 +133,6 @@ static void vTaskButtonPolling(void *pvParameters)
     msg.source = SOURCE_BUTTON;
     uint32_t last_state = 0;
 
-    // Regresamos al método de polling que ya te funcionaba perfectamente
     for (;;) {
         uint32_t current_state = !GPIO_ReadPinInput(BUTTON_PORT, BUTTON_PIN);
 
@@ -172,10 +145,6 @@ static void vTaskButtonPolling(void *pvParameters)
         vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
-
-// ============================================================================
-// IMPLEMENTACIÓN DE TAREA (CONSUMIDOR)
-// ============================================================================
 
 static void vTaskLedControl(void *pvParameters)
 {
@@ -195,7 +164,6 @@ static void vTaskLedControl(void *pvParameters)
                     break;
 
                 case SOURCE_TEMPERATURE:
-                    // Si el valor supera el umbral (sube la medida), se enciende. Si no, se apaga.
                     if (received_msg.value > TEMP_THRESHOLD) {
                         LED_RED_ON();
                     } else {
