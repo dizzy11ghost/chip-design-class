@@ -4,3 +4,10 @@
 ## Descripción de la práctica
 El objetivo de esta práctica era implementar una arquitectura de RISCV de 32 bits con pipeline utilizando Verilog y Quartus Prime Lite. Para poder realizar esto se tomó en consideración la literatura existente respecto a este tipo de arquitectura, en el que se usan 5 etapas para poder manejar el flujo del procesador. Dichas etapas son las etapas de fetch, decode, execute, access memory y memory writeback. Lo que hacen cada una de estas etapas es primero tomar las instrucciones de un archivo de memoria previamente existente, después, se decodifican y se leen los registros para poder obtener los operandos según la instrucción previamente leída. Tras de esto se realizan (según el opcode) las operaciones lógicas o ariméticas necesarias usando una ALU. Como acto seguido, se interactúa con la memoria de datos, y según el proceso se leen o escriben datos según el flanco del reloj. Finalmente, esta la etapa donde se guardan las operaciones realizadas y los resultados obtenidos en el banco de registros. 
 La principal diferencia con RISCV usando pipeline es el hecho de que podemos usar hasta 5 instrucciones diferentes al mismo tiempo, y podemos tenerlas a todas en diferentes etapas, lo que nos permite tener procesos corriendose de manera más eficiente y veloz. 
+
+## Diagrama del pipeline 
+<img width="725" height="418" alt="image" src="https://github.com/user-attachments/assets/2222fcd1-1d24-4e5f-b762-cdfbf64e8680" />
+Diagrama de procesador usando RISCV pipeline (Harris & Harris, 2022)
+
+## Bibliografía utilizada
+Harris, S. L., & Harris, D. M. (2022). Digital design and computer architecture (RISCV edition). Elsevier Inc. https://documentcloud.adobe.com/spodintegration/index.html# 
