@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include "FreeRTOS.h"
 #include "task.h"
-#include "queue.h" // ¡Nueva librería para el manejo de colas!
+#include "queue.h" 
 #include "board.h"
 #include "pin_mux.h"
 #include "clock_config.h"
